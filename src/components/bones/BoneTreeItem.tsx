@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { Bone } from '../../types/bone';
 import { useBoneStore } from '../../store/boneStore';
 
@@ -12,10 +12,11 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     height: 28,
-    cursor: 'pointer',
+    cursor: 'grab',
     gap: 'var(--spacing-xs, 4px)',
     transition: 'background 0.1s',
     paddingRight: 'var(--spacing-sm, 8px)',
+    position: 'relative' as const,
   },
   expandBtn: {
     display: 'flex',
@@ -48,7 +49,7 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     minWidth: 0,
   },
-  visBtn: {
+  actionBtn: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -63,6 +64,15 @@ const styles = {
     opacity: 0,
     transition: 'opacity 0.15s',
   },
+  dropIndicator: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    height: 2,
+    background: 'var(--accent-blue, #58a6ff)',
+    pointerEvents: 'none' as const,
+    zIndex: 10,
+  },
 };
 
 export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
@@ -72,9 +82,13 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
   const selectBone = useBoneStore((s) => s.selectBone);
   const setHoveredBone = useBoneStore((s) => s.setHoveredBone);
   const updateBone = useBoneStore((s) => s.updateBone);
+  const removeBone = useBoneStore((s) => s.removeBone);
+  const reparentBone = useBoneStore((s) => s.reparentBone);
 
   const [expanded, setExpanded] = useState(true);
   const [rowHovered, setRowHovered] = useState(false);
+  const [dropTarget, setDropTarget] = useState<'none' | 'above' | 'on' | 'below'>('none');
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const children = skeleton
     ? skeleton.bones.filter((b) => b.parentId === bone.id)
@@ -84,19 +98,81 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
   const isSelected = selectedBoneId === bone.id;
   const isHovered = hoveredBoneId === bone.id;
 
-  const rowBg = isSelected
-    ? 'var(--active-bg, rgba(255, 255, 255, 0.08))'
-    : isHovered || rowHovered
-      ? 'var(--hover-bg, rgba(255, 255, 255, 0.04))'
-      : 'transparent';
+  const rowBg = dropTarget === 'on'
+    ? 'rgba(88, 166, 255, 0.15)'
+    : isSelected
+      ? 'var(--active-bg, rgba(255, 255, 255, 0.08))'
+      : isHovered || rowHovered
+        ? 'var(--hover-bg, rgba(255, 255, 255, 0.04))'
+        : 'transparent';
 
   const textColor = isSelected
     ? 'var(--text-primary, #e6edf3)'
     : 'var(--text-secondary, #8b949e)';
 
+  // --- Drag handlers ---
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('bone-id', bone.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const y = e.clientY - rect.top;
+    const third = rect.height / 3;
+
+    if (y < third) {
+      setDropTarget('above');
+    } else if (y > third * 2) {
+      setDropTarget('below');
+    } else {
+      setDropTarget('on'); // drop as child
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDropTarget('none');
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('bone-id');
+    if (!draggedId || draggedId === bone.id) {
+      setDropTarget('none');
+      return;
+    }
+
+    if (dropTarget === 'on') {
+      // Reparent as child of this bone
+      reparentBone(draggedId, bone.id);
+      setExpanded(true);
+    } else if (dropTarget === 'above' || dropTarget === 'below') {
+      // Reparent as sibling (same parent as this bone)
+      reparentBone(draggedId, bone.parentId);
+    }
+
+    setDropTarget('none');
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeBone(bone.id);
+  };
+
   return (
     <>
       <div
+        ref={rowRef}
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         style={{
           ...styles.row,
           background: rowBg,
@@ -113,6 +189,14 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
           setHoveredBone(null);
         }}
       >
+        {/* Drop indicator lines */}
+        {dropTarget === 'above' && (
+          <div style={{ ...styles.dropIndicator, top: 0 }} />
+        )}
+        {dropTarget === 'below' && (
+          <div style={{ ...styles.dropIndicator, bottom: 0 }} />
+        )}
+
         {/* Expand/collapse */}
         {hasChildren ? (
           <button
@@ -156,10 +240,31 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
           {bone.name}
         </span>
 
+        {/* Delete button */}
+        <button
+          style={{
+            ...styles.actionBtn,
+            opacity: rowHovered ? 1 : 0,
+            color: 'var(--text-muted, #484f58)',
+          }}
+          onClick={handleDelete}
+          title="Delete bone"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#f85149';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted, #484f58)';
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+
         {/* Visibility toggle */}
         <button
           style={{
-            ...styles.visBtn,
+            ...styles.actionBtn,
             opacity: rowHovered || !bone.visible ? 1 : 0,
             color: bone.visible
               ? 'var(--text-secondary, #8b949e)'

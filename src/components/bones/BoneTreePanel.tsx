@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useBoneStore } from '../../store/boneStore';
 import { useDrawingStore } from '../../store/drawingStore';
 import BoneTreeItem from './BoneTreeItem';
@@ -59,6 +60,9 @@ export default function BoneTreePanel() {
   const createSkeleton = useBoneStore((s) => s.createSkeleton);
   const bindLayerToBone = useBoneStore((s) => s.bindLayerToBone);
   const autoWeightLayer = useBoneStore((s) => s.autoWeightLayer);
+  const reparentBone = useBoneStore((s) => s.reparentBone);
+
+  const [rootDropHover, setRootDropHover] = useState(false);
 
   const rootBones = skeleton
     ? skeleton.bones.filter((b) => b.parentId === null)
@@ -99,13 +103,45 @@ export default function BoneTreePanel() {
         </button>
       </div>
 
-      <div style={styles.tree}>
+      <div
+        style={styles.tree}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setRootDropHover(true);
+        }}
+        onDragLeave={() => setRootDropHover(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          const draggedId = e.dataTransfer.getData('bone-id');
+          if (draggedId) {
+            reparentBone(draggedId, null);
+          }
+          setRootDropHover(false);
+        }}
+      >
         {!skeleton || rootBones.length === 0 ? (
           <div style={styles.empty}>No bones</div>
         ) : (
           rootBones.map((bone) => (
             <BoneTreeItem key={bone.id} bone={bone} depth={0} />
           ))
+        )}
+        {/* Root drop zone */}
+        {rootDropHover && (
+          <div style={{
+            height: 24,
+            margin: '2px 8px',
+            border: '1px dashed var(--accent-blue, #58a6ff)',
+            borderRadius: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 'var(--font-size-xs, 10px)',
+            color: 'var(--accent-blue, #58a6ff)',
+          }}>
+            Drop here to make root
+          </div>
         )}
       </div>
     </div>

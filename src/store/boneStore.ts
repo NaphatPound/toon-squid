@@ -18,6 +18,7 @@ interface BoneState {
   createSkeleton: (name: string) => void;
   addBone: (parentId: string | null, x: number, y: number, length: number, rotation: number) => string;
   removeBone: (id: string) => void;
+  reparentBone: (boneId: string, newParentId: string | null) => void;
   updateBone: (id: string, updates: Partial<Bone>) => void;
   selectBone: (id: string | null) => void;
   setHoveredBone: (id: string | null) => void;
@@ -122,6 +123,56 @@ export const useBoneStore = create<BoneState>((set, get) => ({
         skeleton: { ...s.skeleton, bones },
         selectedBoneId: s.selectedBoneId && toRemove.has(s.selectedBoneId) ? null : s.selectedBoneId,
         bindings: s.bindings.filter((b) => !toRemove.has(b.boneId)),
+      };
+    }),
+
+  reparentBone: (boneId, newParentId) =>
+    set((s) => {
+      if (!s.skeleton) return s;
+      // Prevent parenting to self or to own descendant
+      if (boneId === newParentId) return s;
+      const isDescendant = (parentId: string, childId: string): boolean => {
+        const children = s.skeleton!.bones.filter((b) => b.parentId === parentId);
+        for (const c of children) {
+          if (c.id === childId) return true;
+          if (isDescendant(c.id, childId)) return true;
+        }
+        return false;
+      };
+      if (newParentId && isDescendant(boneId, newParentId)) return s;
+
+      // Compute current world position to preserve visual position
+      const worldBones = computeWorldTransforms(s.skeleton.bones);
+      const worldBone = worldBones.find((b) => b.id === boneId);
+      if (!worldBone) return s;
+
+      let newLocalX = worldBone.worldX;
+      let newLocalY = worldBone.worldY;
+      let newLocalRotation = worldBone.worldRotation;
+
+      if (newParentId) {
+        const parentWorld = worldBones.find((b) => b.id === newParentId);
+        if (parentWorld) {
+          // Convert world position to parent's local space
+          const cos = Math.cos(-parentWorld.worldRotation);
+          const sin = Math.sin(-parentWorld.worldRotation);
+          const dx = worldBone.worldX - parentWorld.worldX;
+          const dy = worldBone.worldY - parentWorld.worldY;
+          newLocalX = cos * dx - sin * dy;
+          newLocalY = sin * dx + cos * dy;
+          newLocalRotation = worldBone.worldRotation - parentWorld.worldRotation;
+        }
+      }
+
+      return {
+        skeleton: {
+          ...s.skeleton,
+          bones: s.skeleton.bones.map((b) =>
+            b.id === boneId
+              ? { ...b, parentId: newParentId, localX: newLocalX, localY: newLocalY, localRotation: newLocalRotation }
+              : b
+          ),
+        },
       };
     }),
 
