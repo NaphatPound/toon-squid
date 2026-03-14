@@ -1,0 +1,232 @@
+import { create } from 'zustand';
+import type { Bone, Skeleton, Animation, Pose, BoneLayerBinding } from '../types/bone';
+import { generateId } from '../utils/math';
+import { computeWorldTransforms } from '../engine/bone/BoneSystem';
+
+interface BoneState {
+  skeleton: Skeleton | null;
+  selectedBoneId: string | null;
+  hoveredBoneId: string | null;
+  animations: Animation[];
+  activeAnimationId: string | null;
+  currentTime: number;
+  isPlaying: boolean;
+  bindings: BoneLayerBinding[];
+
+  createSkeleton: (name: string) => void;
+  addBone: (parentId: string | null, x: number, y: number, length: number, rotation: number) => string;
+  removeBone: (id: string) => void;
+  updateBone: (id: string, updates: Partial<Bone>) => void;
+  selectBone: (id: string | null) => void;
+  setHoveredBone: (id: string | null) => void;
+  getBone: (id: string) => Bone | undefined;
+  getChildBones: (parentId: string) => Bone[];
+
+  addAnimation: (name: string, fps: number, duration: number) => void;
+  setActiveAnimation: (id: string | null) => void;
+  addPose: (animationId: string, pose: Pose) => void;
+  removePose: (animationId: string, poseId: string) => void;
+  setCurrentTime: (time: number) => void;
+  setIsPlaying: (playing: boolean) => void;
+
+  bindLayerToBone: (boneId: string, layerId: string) => void;
+  removeBinding: (boneId: string, layerId: string) => void;
+  unbindLayer: (layerId: string) => void;
+  unbindBone: (boneId: string) => void;
+  updateBindingWeight: (boneId: string, layerId: string, weight: number) => void;
+  getBindingsForLayer: (layerId: string) => BoneLayerBinding[];
+  getBindingsForBone: (boneId: string) => BoneLayerBinding[];
+}
+
+export const useBoneStore = create<BoneState>((set, get) => ({
+  skeleton: null,
+  selectedBoneId: null,
+  hoveredBoneId: null,
+  animations: [],
+  activeAnimationId: null,
+  currentTime: 0,
+  isPlaying: false,
+  bindings: [],
+
+  createSkeleton: (name) =>
+    set({
+      skeleton: {
+        id: generateId(),
+        name,
+        bones: [],
+        rootBoneId: '',
+      },
+    }),
+
+  addBone: (parentId, x, y, length, rotation) => {
+    const boneId = generateId();
+    const bone: Bone = {
+      id: boneId,
+      name: `Bone ${(get().skeleton?.bones.length ?? 0) + 1}`,
+      parentId,
+      localX: x,
+      localY: y,
+      localRotation: rotation,
+      localScaleX: 1,
+      localScaleY: 1,
+      worldX: x,
+      worldY: y,
+      worldRotation: rotation,
+      length,
+      boundImageId: null,
+      color: 'rgba(100, 160, 255, 0.6)',
+      visible: true,
+    };
+
+    set((s) => {
+      if (!s.skeleton) return s;
+      const bones = [...s.skeleton.bones, bone];
+      return {
+        skeleton: {
+          ...s.skeleton,
+          bones,
+          rootBoneId: parentId === null ? boneId : s.skeleton.rootBoneId,
+        },
+        selectedBoneId: boneId,
+      };
+    });
+
+    return boneId;
+  },
+
+  removeBone: (id) =>
+    set((s) => {
+      if (!s.skeleton) return s;
+      // Remove bone and all children recursively
+      const toRemove = new Set<string>();
+      const collectChildren = (parentId: string) => {
+        toRemove.add(parentId);
+        s.skeleton!.bones
+          .filter((b) => b.parentId === parentId)
+          .forEach((b) => collectChildren(b.id));
+      };
+      collectChildren(id);
+
+      const bones = s.skeleton.bones.filter((b) => !toRemove.has(b.id));
+      return {
+        skeleton: { ...s.skeleton, bones },
+        selectedBoneId: s.selectedBoneId && toRemove.has(s.selectedBoneId) ? null : s.selectedBoneId,
+        bindings: s.bindings.filter((b) => !toRemove.has(b.boneId)),
+      };
+    }),
+
+  updateBone: (id, updates) =>
+    set((s) => {
+      if (!s.skeleton) return s;
+      return {
+        skeleton: {
+          ...s.skeleton,
+          bones: s.skeleton.bones.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+        },
+      };
+    }),
+
+  selectBone: (id) => set({ selectedBoneId: id }),
+  setHoveredBone: (id) => set({ hoveredBoneId: id }),
+
+  getBone: (id) => get().skeleton?.bones.find((b) => b.id === id),
+
+  getChildBones: (parentId) =>
+    get().skeleton?.bones.filter((b) => b.parentId === parentId) ?? [],
+
+  addAnimation: (name, fps, duration) =>
+    set((s) => {
+      const anim: Animation = {
+        id: generateId(),
+        name,
+        duration,
+        fps,
+        poses: [],
+        loop: true,
+      };
+      return {
+        animations: [...s.animations, anim],
+        activeAnimationId: anim.id,
+      };
+    }),
+
+  setActiveAnimation: (id) => set({ activeAnimationId: id }),
+
+  addPose: (animationId, pose) =>
+    set((s) => ({
+      animations: s.animations.map((a) =>
+        a.id === animationId ? { ...a, poses: [...a.poses, pose] } : a
+      ),
+    })),
+
+  removePose: (animationId, poseId) =>
+    set((s) => ({
+      animations: s.animations.map((a) =>
+        a.id === animationId
+          ? { ...a, poses: a.poses.filter((p) => p.id !== poseId) }
+          : a
+      ),
+    })),
+
+  setCurrentTime: (time) => set({ currentTime: time }),
+  setIsPlaying: (playing) => set({ isPlaying: playing }),
+
+  bindLayerToBone: (boneId, layerId) => {
+    const { skeleton, bindings } = get();
+    if (!skeleton) return;
+
+    // Already bound? skip
+    if (bindings.some((b) => b.boneId === boneId && b.layerId === layerId)) return;
+
+    // Compute world transforms to get bind pose
+    const worldBones = computeWorldTransforms(skeleton.bones);
+    const bone = worldBones.find((b) => b.id === boneId);
+    if (!bone) return;
+
+    const binding: BoneLayerBinding = {
+      boneId,
+      layerId,
+      bindWorldX: bone.worldX,
+      bindWorldY: bone.worldY,
+      bindWorldRotation: bone.worldRotation,
+      bindScaleX: bone.localScaleX,
+      bindScaleY: bone.localScaleY,
+      weight: 1.0,
+    };
+    set((s) => ({
+      bindings: [...s.bindings, binding],
+    }));
+  },
+
+  removeBinding: (boneId, layerId) =>
+    set((s) => ({
+      bindings: s.bindings.filter(
+        (b) => !(b.boneId === boneId && b.layerId === layerId)
+      ),
+    })),
+
+  unbindLayer: (layerId) =>
+    set((s) => ({
+      bindings: s.bindings.filter((b) => b.layerId !== layerId),
+    })),
+
+  unbindBone: (boneId) =>
+    set((s) => ({
+      bindings: s.bindings.filter((b) => b.boneId !== boneId),
+    })),
+
+  updateBindingWeight: (boneId, layerId, weight) =>
+    set((s) => ({
+      bindings: s.bindings.map((b) =>
+        b.boneId === boneId && b.layerId === layerId
+          ? { ...b, weight: Math.max(0, Math.min(1, weight)) }
+          : b
+      ),
+    })),
+
+  getBindingsForLayer: (layerId) =>
+    get().bindings.filter((b) => b.layerId === layerId),
+
+  getBindingsForBone: (boneId) =>
+    get().bindings.filter((b) => b.boneId === boneId),
+}));
