@@ -103,23 +103,7 @@ export default function BoneTreePanel() {
         </button>
       </div>
 
-      <div
-        style={styles.tree}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          setRootDropHover(true);
-        }}
-        onDragLeave={() => setRootDropHover(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          const draggedId = e.dataTransfer.getData('bone-id');
-          if (draggedId) {
-            reparentBone(draggedId, null);
-          }
-          setRootDropHover(false);
-        }}
-      >
+      <div style={styles.tree}>
         {!skeleton || rootBones.length === 0 ? (
           <div style={styles.empty}>No bones</div>
         ) : (
@@ -127,22 +111,39 @@ export default function BoneTreePanel() {
             <BoneTreeItem key={bone.id} bone={bone} depth={0} />
           ))
         )}
-        {/* Root drop zone */}
-        {rootDropHover && (
-          <div style={{
-            height: 24,
+        {/* Root drop zone - always visible during drag, acts as "make root" target */}
+        <div
+          style={{
+            minHeight: 32,
             margin: '2px 8px',
-            border: '1px dashed var(--accent-blue, #58a6ff)',
+            border: rootDropHover ? '1px dashed var(--accent-blue, #58a6ff)' : '1px dashed transparent',
             borderRadius: 4,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 'var(--font-size-xs, 10px)',
-            color: 'var(--accent-blue, #58a6ff)',
-          }}>
-            Drop here to make root
-          </div>
-        )}
+            color: rootDropHover ? 'var(--accent-blue, #58a6ff)' : 'transparent',
+            transition: 'border-color 0.15s, color 0.15s',
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            setRootDropHover(true);
+          }}
+          onDragLeave={() => setRootDropHover(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const draggedId = e.dataTransfer.getData('bone-id');
+            if (draggedId) {
+              reparentBone(draggedId, null);
+            }
+            setRootDropHover(false);
+          }}
+        >
+          Drop here to make root
+        </div>
       </div>
     </div>
   );

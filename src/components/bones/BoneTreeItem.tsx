@@ -112,12 +112,18 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
 
   // --- Drag handlers ---
   const handleDragStart = (e: React.DragEvent) => {
+    // Don't start drag from buttons
+    if ((e.target as HTMLElement).closest('button')) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('bone-id', bone.id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
 
     const rect = rowRef.current?.getBoundingClientRect();
@@ -141,6 +147,7 @@ export default function BoneTreeItem({ bone, depth }: BoneTreeItemProps) {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const draggedId = e.dataTransfer.getData('bone-id');
     if (!draggedId || draggedId === bone.id) {
       setDropTarget('none');
