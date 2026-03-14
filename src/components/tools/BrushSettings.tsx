@@ -1,12 +1,31 @@
-import React, { useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import Slider from '../common/Slider';
+import ColorPicker from './ColorPicker';
+
+const PALETTE_KEY = 'toon-squid-palette';
+
+function loadPalette(): string[] {
+  try {
+    const stored = localStorage.getItem(PALETTE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return ['#e6edf3', '#f85149', '#f0883e', '#e3b341', '#3fb950', '#58a6ff', '#bc8cff', '#ff7b72', '#0d1117', '#ffffff'];
+}
+
+function savePalette(colors: string[]) {
+  try {
+    localStorage.setItem(PALETTE_KEY, JSON.stringify(colors));
+  } catch { /* ignore */ }
+}
 
 const BrushSettings: React.FC = () => {
   const brushSettings = useDrawingStore((s) => s.brushSettings);
   const setBrushSettings = useDrawingStore((s) => s.setBrushSettings);
   const brushType = useDrawingStore((s) => s.brushType);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [palette, setPalette] = useState<string[]>(loadPalette);
 
   const handleSize = useCallback(
     (v: number) => setBrushSettings({ size: v }),
@@ -174,6 +193,99 @@ const BrushSettings: React.FC = () => {
         height={60}
         style={styles.preview}
       />
+
+      {/* Color section */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            backgroundColor: brushSettings.color,
+            border: '2px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          onClick={() => setShowColorPicker(!showColorPicker)}
+          title="Pick color"
+        />
+        <span style={{ fontSize: 11, color: 'var(--text-secondary, #8b949e)', fontFamily: 'monospace' }}>
+          {brushSettings.color}
+        </span>
+        <button
+          style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-secondary, #8b949e)',
+            borderRadius: 4,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+          onClick={() => {
+            const color = brushSettings.color.toLowerCase();
+            if (!palette.includes(color)) {
+              const newPalette = [...palette, color];
+              setPalette(newPalette);
+              savePalette(newPalette);
+            }
+          }}
+          title="Save to palette"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--accent-blue, #58a6ff)';
+            e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-secondary, #8b949e)';
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Color Picker (toggle) */}
+      {showColorPicker && <ColorPicker />}
+
+      {/* Palette */}
+      <div>
+        <div style={{ fontSize: 10, color: 'var(--text-muted, #484f58)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+          Palette
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {palette.map((color, i) => (
+            <div
+              key={`${color}-${i}`}
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 4,
+                backgroundColor: color,
+                border: brushSettings.color.toLowerCase() === color.toLowerCase()
+                  ? '2px solid var(--accent-blue, #58a6ff)'
+                  : '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                cursor: 'pointer',
+                position: 'relative',
+              }}
+              onClick={() => setBrushSettings({ color })}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                const newPalette = palette.filter((_, idx) => idx !== i);
+                setPalette(newPalette);
+                savePalette(newPalette);
+              }}
+              title={`${color} (right-click to remove)`}
+            />
+          ))}
+        </div>
+      </div>
 
       <Slider
         label="Size"
