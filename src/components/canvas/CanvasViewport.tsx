@@ -55,6 +55,7 @@ function CanvasViewport() {
   const dragBoneIdRef = useRef<string | null>(null);
   const boneStartDocRef = useRef({ x: 0, y: 0 });
   const boneOrigRef = useRef({ localX: 0, localY: 0, localRotation: 0 });
+  const boneSetupModeRef = useRef(false); // Shift held = move bone without affecting image
   // For bone creation: start position in doc coords and parent info
   const boneCreateStartRef = useRef({ x: 0, y: 0 });
   const boneCreateParentIdRef = useRef<string | null>(null);
@@ -382,6 +383,9 @@ function CanvasViewport() {
       const worldBones = getWorldBones();
       const hitThreshold = BONE_HIT_THRESHOLD / engine.viewport.zoom;
 
+      // Shift = setup mode (move bone without affecting image)
+      boneSetupModeRef.current = nativeEvent.shiftKey;
+
       // 1. Hit test joint → move
       const jointHit = hitTestBoneJoint(worldBones, docPt.x, docPt.y, hitThreshold);
       if (jointHit) {
@@ -507,7 +511,6 @@ function CanvasViewport() {
       const dy = docPt.y - boneStartDocRef.current.y;
 
       if (rawBone.parentId) {
-        // Convert world delta to parent local space
         const worldBones = getWorldBones();
         const parentWorld = worldBones.find((b) => b.id === rawBone.parentId);
         if (parentWorld) {
@@ -527,6 +530,7 @@ function CanvasViewport() {
           localY: boneOrigRef.current.localY + dy,
         });
       }
+      if (boneSetupModeRef.current) boneStore.updateBindPose(boneId);
       engine.invalidate();
       drawCursor(nativeEvent.clientX, nativeEvent.clientY);
       return;
@@ -553,6 +557,7 @@ function CanvasViewport() {
       } else {
         boneStore.updateBone(boneId, { localRotation: worldAngle });
       }
+      if (boneSetupModeRef.current) boneStore.updateBindPose(boneId);
       engine.invalidate();
       drawCursor(nativeEvent.clientX, nativeEvent.clientY);
       return;
@@ -584,6 +589,7 @@ function CanvasViewport() {
       }
 
       boneStore.updateBone(boneId, updates);
+      if (boneSetupModeRef.current) boneStore.updateBindPose(boneId);
       engine.invalidate();
       drawCursor(nativeEvent.clientX, nativeEvent.clientY);
       return;
@@ -697,7 +703,12 @@ function CanvasViewport() {
 
     // --- Bone move/rotate/resize end ---
     if (mode === 'bone-move' || mode === 'bone-rotate' || mode === 'bone-resize') {
+      // In setup mode (Shift held), update bind pose so image stays in place
+      if (boneSetupModeRef.current && dragBoneIdRef.current) {
+        useBoneStore.getState().updateBindPose(dragBoneIdRef.current);
+      }
       dragBoneIdRef.current = null;
+      boneSetupModeRef.current = false;
       drawCursor(nativeEvent.clientX, nativeEvent.clientY);
       return;
     }

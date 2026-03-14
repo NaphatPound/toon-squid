@@ -40,6 +40,7 @@ interface BoneState {
   getBindingsForLayer: (layerId: string) => BoneLayerBinding[];
   getBindingsForBone: (boneId: string) => BoneLayerBinding[];
   autoWeightLayer: (layerId: string) => void;
+  updateBindPose: (boneId: string) => void;
   generateMesh: (layer: import('../types/drawing').Layer) => void;
   removeMesh: (layerId: string) => void;
   getMesh: (layerId: string) => LayerMesh | undefined;
@@ -322,6 +323,30 @@ export const useBoneStore = create<BoneState>((set, get) => ({
 
   getMesh: (layerId) =>
     get().meshes.find((m) => m.layerId === layerId),
+
+  updateBindPose: (boneId) => {
+    const { skeleton } = get();
+    if (!skeleton) return;
+
+    const worldBones = computeWorldTransforms(skeleton.bones);
+    const bone = worldBones.find((b) => b.id === boneId);
+    if (!bone) return;
+
+    set((s) => ({
+      bindings: s.bindings.map((b) =>
+        b.boneId === boneId
+          ? {
+              ...b,
+              bindWorldX: bone.worldX,
+              bindWorldY: bone.worldY,
+              bindWorldRotation: bone.worldRotation,
+              bindScaleX: bone.localScaleX,
+              bindScaleY: bone.localScaleY,
+            }
+          : b
+      ),
+    }));
+  },
 
   autoWeightLayer: (layerId) => {
     const { skeleton, bindings } = get();
