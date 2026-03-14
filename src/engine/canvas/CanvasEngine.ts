@@ -1,9 +1,10 @@
 import { ViewportTransform } from './ViewportTransform';
 import { LayerCompositor } from './LayerCompositor';
 import type { Layer } from '../../types/drawing';
-import type { Bone, BoneLayerBinding } from '../../types/bone';
+import type { Bone, BoneLayerBinding, LayerMesh } from '../../types/bone';
 import { renderBones } from '../bone/BoneRenderer';
 import { computeWorldTransforms } from '../bone/BoneSystem';
+import { deformMeshVertices, renderDeformedMesh, renderMeshWireframe } from '../bone/MeshDeformer';
 
 export class CanvasEngine {
   public viewport: ViewportTransform;
@@ -50,7 +51,7 @@ export class CanvasEngine {
 
   render(
     layers: Layer[],
-    boneData?: { bones: Bone[]; selectedId: string | null; hoveredId: string | null; appMode: string; bindings: BoneLayerBinding[] },
+    boneData?: { bones: Bone[]; selectedId: string | null; hoveredId: string | null; appMode: string; bindings: BoneLayerBinding[]; meshes: LayerMesh[]; showMeshOverlay: boolean },
     docSize?: { width: number; height: number }
   ): void {
     if (!this.layerCtx || !this.layerCanvas) return;
@@ -94,6 +95,14 @@ export class CanvasEngine {
       boneMap.set(bone.id, bone);
     }
 
+    // Build mesh lookup
+    const meshMap = new Map<string, LayerMesh>();
+    if (boneData?.meshes) {
+      for (const mesh of boneData.meshes) {
+        meshMap.set(mesh.layerId, mesh);
+      }
+    }
+
     // Composite layers
     for (const layer of layers) {
       if (!layer.visible || !layer.canvas) continue;
@@ -101,13 +110,27 @@ export class CanvasEngine {
       ctx.globalAlpha = layer.opacity;
       ctx.globalCompositeOperation = this.getCompositeOp(layer.blendMode);
 
-      // Apply blended bone transforms if this layer is bound to bones
       const layerBindings = bindingMap.get(layer.id);
-      if (layerBindings && layerBindings.length > 0) {
+      const mesh = meshMap.get(layer.id);
+
+      if (mesh && layerBindings && layerBindings.length > 0 && worldBones.length > 0) {
+        // Mesh deformation rendering
+        const deformed = deformMeshVertices(mesh, worldBones, layerBindings);
+        renderDeformedMesh(ctx, layer.canvas, mesh, deformed);
+
+        // Show mesh wireframe overlay in rig mode
+        if (boneData?.showMeshOverlay && (boneData.appMode === 'rig' || boneData.appMode === 'animate')) {
+          renderMeshWireframe(ctx, mesh, deformed);
+        }
+      } else if (layerBindings && layerBindings.length > 0) {
+        // Fallback: simple affine transform (no mesh)
         this.applyMultiBoneTransform(ctx, layerBindings, boneMap);
+        ctx.drawImage(layer.canvas, 0, 0);
+      } else {
+        // No binding, draw normally
+        ctx.drawImage(layer.canvas, 0, 0);
       }
 
-      ctx.drawImage(layer.canvas, 0, 0);
       ctx.restore();
     }
 
@@ -224,7 +247,7 @@ export class CanvasEngine {
     return map[blendMode] || 'source-over';
   }
 
-  startRenderLoop(getLayers: () => Layer[], getBoneData?: () => { bones: Bone[]; selectedId: string | null; hoveredId: string | null; appMode: string; bindings: BoneLayerBinding[] }, getDocSize?: () => { width: number; height: number }): void {
+  startRenderLoop(getLayers: () => Layer[], getBoneData?: () => { bones: Bone[]; selectedId: string | null; hoveredId: string | null; appMode: string; bindings: BoneLayerBinding[]; meshes: LayerMesh[]; showMeshOverlay: boolean }, getDocSize?: () => { width: number; height: number }): void {
     const loop = () => {
       if (this.needsRender) {
         this.render(getLayers(), getBoneData?.(), getDocSize?.());

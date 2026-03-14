@@ -103,12 +103,16 @@ function CanvasViewport() {
           }
         }
 
+        const { meshes, showMeshOverlay } = useBoneStore.getState();
+
         return {
           bones,
           selectedId: selectedBoneId,
           hoveredId: hoveredBoneId,
           appMode,
           bindings,
+          meshes,
+          showMeshOverlay,
         };
       },
       () => {

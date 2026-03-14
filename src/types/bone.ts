@@ -48,6 +48,26 @@ export interface Animation {
 }
 
 /**
+ * A deformable mesh bound to a layer for skeletal animation.
+ * Vertices are in document (world) space at bind pose.
+ * Each vertex has weighted bone influences for deformation.
+ */
+export interface LayerMesh {
+  layerId: string;
+  /** Vertex positions in document space (bind pose) */
+  vertices: { x: number; y: number }[];
+  /** Texture coordinates [0..1] mapping to the layer canvas */
+  uvs: { u: number; v: number }[];
+  /** Triangle indices (groups of 3) */
+  indices: number[];
+  /** Per-vertex bone weights: boneWeights[vertexIndex] = [{boneId, weight}, ...] */
+  boneWeights: { boneId: string; weight: number }[][];
+  /** Grid columns / rows used to generate the mesh */
+  cols: number;
+  rows: number;
+}
+
+/**
  * Binding between a bone and a layer. Records the bone's world transform
  * at bind time so we can compute the delta when animating.
  */

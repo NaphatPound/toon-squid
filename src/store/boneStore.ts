@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { Bone, Skeleton, Animation, Pose, BoneLayerBinding } from '../types/bone';
+import type { Bone, Skeleton, Animation, Pose, BoneLayerBinding, LayerMesh } from '../types/bone';
 import { generateId } from '../utils/math';
 import { computeWorldTransforms } from '../engine/bone/BoneSystem';
+import { generateLayerMesh } from '../engine/bone/MeshGenerator';
 
 interface BoneState {
   skeleton: Skeleton | null;
@@ -12,6 +13,7 @@ interface BoneState {
   currentTime: number;
   isPlaying: boolean;
   bindings: BoneLayerBinding[];
+  meshes: LayerMesh[];
 
   createSkeleton: (name: string) => void;
   addBone: (parentId: string | null, x: number, y: number, length: number, rotation: number) => string;
@@ -37,6 +39,11 @@ interface BoneState {
   getBindingsForLayer: (layerId: string) => BoneLayerBinding[];
   getBindingsForBone: (boneId: string) => BoneLayerBinding[];
   autoWeightLayer: (layerId: string) => void;
+  generateMesh: (layer: import('../types/drawing').Layer) => void;
+  removeMesh: (layerId: string) => void;
+  getMesh: (layerId: string) => LayerMesh | undefined;
+  showMeshOverlay: boolean;
+  setShowMeshOverlay: (show: boolean) => void;
 }
 
 export const useBoneStore = create<BoneState>((set, get) => ({
@@ -48,6 +55,8 @@ export const useBoneStore = create<BoneState>((set, get) => ({
   currentTime: 0,
   isPlaying: false,
   bindings: [],
+  meshes: [],
+  showMeshOverlay: true,
 
   createSkeleton: (name) =>
     set({
@@ -230,6 +239,38 @@ export const useBoneStore = create<BoneState>((set, get) => ({
 
   getBindingsForBone: (boneId) =>
     get().bindings.filter((b) => b.boneId === boneId),
+
+  setShowMeshOverlay: (show) => set({ showMeshOverlay: show }),
+
+  generateMesh: (layer) => {
+    const { skeleton, bindings } = get();
+    if (!skeleton || skeleton.bones.length === 0) return;
+
+    // Get bones bound to this layer
+    const layerBindings = bindings.filter((b) => b.layerId === layer.id);
+    if (layerBindings.length === 0) return;
+
+    // Get world-transformed bones
+    const worldBones = computeWorldTransforms(skeleton.bones);
+    // Only use bones that are bound to this layer
+    const boundBoneIds = new Set(layerBindings.map((b) => b.boneId));
+    const relevantBones = worldBones.filter((b) => boundBoneIds.has(b.id));
+
+    const mesh = generateLayerMesh(layer, relevantBones);
+    if (!mesh) return;
+
+    set((s) => ({
+      meshes: [...s.meshes.filter((m) => m.layerId !== layer.id), mesh],
+    }));
+  },
+
+  removeMesh: (layerId) =>
+    set((s) => ({
+      meshes: s.meshes.filter((m) => m.layerId !== layerId),
+    })),
+
+  getMesh: (layerId) =>
+    get().meshes.find((m) => m.layerId === layerId),
 
   autoWeightLayer: (layerId) => {
     const { skeleton, bindings } = get();

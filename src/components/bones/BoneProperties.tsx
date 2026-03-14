@@ -121,6 +121,23 @@ const removeBtnStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
+const autoMeshBtnStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  width: '100%',
+  padding: '5px 8px',
+  marginBottom: 4,
+  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+  borderRadius: 4,
+  background: 'var(--bg-tertiary, #161b22)',
+  color: 'var(--text-primary, #e6edf3)',
+  fontSize: 'var(--font-size-sm, 11px)',
+  cursor: 'pointer',
+  boxSizing: 'border-box',
+  transition: 'background 0.15s, color 0.15s',
+};
+
 export default function BoneProperties() {
   const selectedBoneId = useBoneStore((s) => s.selectedBoneId);
   const skeleton = useBoneStore((s) => s.skeleton);
@@ -343,6 +360,40 @@ export default function BoneProperties() {
 
         {boneBindings.length === 0 && availableLayers.length === 0 && (
           <div style={{ ...styles.empty, padding: '6px 0' }}>No layers available</div>
+        )}
+
+        {/* Auto Mesh buttons per bound layer */}
+        {boneBindings.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            {boneBindings.map((binding) => {
+              const layer = layers.find((l) => l.id === binding.layerId);
+              if (!layer) return null;
+              const hasMesh = !!useBoneStore.getState().getMesh(binding.layerId);
+              return (
+                <button
+                  key={binding.layerId}
+                  style={autoMeshBtnStyle}
+                  onClick={() => {
+                    useBoneStore.getState().generateMesh(layer);
+                  }}
+                  title={hasMesh ? `Rebuild mesh for ${layer.name}` : `Generate mesh for ${layer.name}`}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--accent-blue, #58a6ff)';
+                    e.currentTarget.style.color = '#fff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-tertiary, #161b22)';
+                    e.currentTarget.style.color = 'var(--text-primary, #e6edf3)';
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round">
+                    <path d="M1 1h3v3H1zM5 1h3v3H5zM9 1h2v3H9zM1 5h3v3H1zM5 5h3v3H5zM9 5h2v3H9zM1 9h3v2H1zM5 9h3v2H5zM9 9h2v2H9z" />
+                  </svg>
+                  {hasMesh ? 'Rebuild' : 'Auto'} Mesh: {layer.name}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
