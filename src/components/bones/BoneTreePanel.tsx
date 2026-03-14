@@ -1,4 +1,5 @@
 import { useBoneStore } from '../../store/boneStore';
+import { useDrawingStore } from '../../store/drawingStore';
 import BoneTreeItem from './BoneTreeItem';
 
 const styles = {
@@ -26,6 +27,19 @@ const styles = {
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
   },
+  addBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 22,
+    height: 22,
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--text-secondary, #8b949e)',
+    borderRadius: 4,
+    cursor: 'pointer',
+    padding: 0,
+  },
   tree: {
     flex: 1,
     overflowY: 'auto' as const,
@@ -41,15 +55,48 @@ const styles = {
 
 export default function BoneTreePanel() {
   const skeleton = useBoneStore((s) => s.skeleton);
+  const addBone = useBoneStore((s) => s.addBone);
+  const createSkeleton = useBoneStore((s) => s.createSkeleton);
+  const bindLayerToBone = useBoneStore((s) => s.bindLayerToBone);
+  const autoWeightLayer = useBoneStore((s) => s.autoWeightLayer);
 
   const rootBones = skeleton
     ? skeleton.bones.filter((b) => b.parentId === null)
     : [];
 
+  const handleAddRootBone = () => {
+    if (!skeleton) {
+      createSkeleton('Skeleton');
+    }
+    const { canvasWidth, canvasHeight, activeLayerId } = useDrawingStore.getState();
+    const newId = addBone(null, canvasWidth / 2, canvasHeight / 2, 80, 0);
+    if (activeLayerId && newId) {
+      bindLayerToBone(newId, activeLayerId);
+      autoWeightLayer(activeLayerId);
+    }
+  };
+
   return (
     <div style={styles.panel}>
       <div style={styles.header}>
         <span style={styles.title}>Skeleton</span>
+        <button
+          style={styles.addBtn}
+          onClick={handleAddRootBone}
+          title="Add root bone"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-primary, #e6edf3)';
+            e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-secondary, #8b949e)';
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
 
       <div style={styles.tree}>

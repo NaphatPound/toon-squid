@@ -434,10 +434,13 @@ function CanvasViewport() {
         boneStore.createSkeleton('Skeleton');
       }
       modeRef.current = 'bone-create';
-      boneCreateParentIdRef.current = boneStore.selectedBoneId;
+
+      // Alt+click = force root bone (no parent), otherwise use selected as parent
+      const forceRoot = nativeEvent.altKey;
+      boneCreateParentIdRef.current = forceRoot ? null : boneStore.selectedBoneId;
 
       // For child bone, start at parent's tip
-      if (boneStore.selectedBoneId) {
+      if (!forceRoot && boneStore.selectedBoneId) {
         const parentWorld = worldBones.find((b) => b.id === boneStore.selectedBoneId);
         if (parentWorld) {
           const tip = getBoneTip(parentWorld);
