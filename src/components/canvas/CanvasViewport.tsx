@@ -12,7 +12,7 @@ import { getPoseAtTime, applyPose } from '../../engine/bone/BonePoseManager';
 import type { Point } from '../../types/drawing';
 import type { Bone } from '../../types/bone';
 
-const BRUSH_TOOLS = new Set<string>(['pen', 'ink', 'pencil', 'marker', 'eraser']);
+const BRUSH_TOOLS = new Set<string>(['pen', 'ink', 'pencil', 'marker', 'eraser', 'custom']);
 const BONE_HIT_THRESHOLD = 14;
 const MIN_BONE_LENGTH = 5;
 
@@ -361,10 +361,18 @@ function CanvasViewport() {
       resetInputState();
       const point = normalizePointerEvent(nativeEvent);
       const dp = screenToDoc(point.x, point.y);
+
+      // Set custom brush if using custom type
+      const { brushType, brushSettings, customBrushes, activeCustomBrushId } = useDrawingStore.getState();
+      if (brushType === 'custom' && activeCustomBrushId) {
+        const customBrush = customBrushes.find((b) => b.id === activeCustomBrushId);
+        if (customBrush) {
+          brushEngine.setCustomBrush(customBrush);
+        }
+      }
+
       brushEngine.beginStroke({ x: dp.x, y: dp.y, pressure: point.pressure, timestamp: point.timestamp });
       capture();
-
-      const { brushType, brushSettings } = useDrawingStore.getState();
       engine.clearOverlay();
       const overlayCtx = engine.overlay;
       if (overlayCtx) {

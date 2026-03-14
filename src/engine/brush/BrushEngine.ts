@@ -1,6 +1,7 @@
-import type { Point, BrushSettings, BrushType } from '../../types/drawing';
+import type { Point, BrushSettings, BrushType, CustomBrush } from '../../types/drawing';
 import { computeDynamicStroke, spacedStamps, type StampPoint } from './DynamicStroke';
 import { clamp } from '../../utils/math';
+import { CustomBrushRenderer } from './CustomBrushRenderer';
 
 export interface BrushRenderer {
   renderStamp(ctx: CanvasRenderingContext2D, stamp: StampPoint, settings: BrushSettings): void;
@@ -158,12 +159,21 @@ class EraserBrushRenderer implements BrushRenderer {
   }
 }
 
+const customBrushRenderer = new CustomBrushRenderer({
+  id: '', name: '', shape: 'circle', spacing: 0.15, scatter: 0,
+  rotation: 'none', rotationAngle: 0, sizeJitter: 0, opacityJitter: 0,
+  hardness: 0.8, roundness: 1, grainOpacity: 0, grainScale: 1,
+  taperStart: 0.15, taperEnd: 0.15, pressureSize: true, pressureOpacity: false,
+  dualBrush: false, dualShape: 'circle', dualSizeRatio: 0.5,
+});
+
 const RENDERERS: Record<BrushType, BrushRenderer> = {
   pen: new PenBrushRenderer(),
   ink: new InkBrushRenderer(),
   pencil: new PencilBrushRenderer(),
   marker: new MarkerBrushRenderer(),
   eraser: new EraserBrushRenderer(),
+  custom: customBrushRenderer,
 };
 
 export class BrushEngine {
@@ -173,6 +183,10 @@ export class BrushEngine {
 
   setPreviewContext(ctx: CanvasRenderingContext2D): void {
     this.previewCtx = ctx;
+  }
+
+  setCustomBrush(brush: CustomBrush): void {
+    customBrushRenderer.setBrush(brush);
   }
 
   beginStroke(point: Point): void {

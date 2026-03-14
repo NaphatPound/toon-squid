@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useMemo, useState, lazy, Suspense } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import Slider from '../common/Slider';
 import ColorPicker from './ColorPicker';
+
+const BrushStudio = lazy(() => import('./BrushStudio'));
 
 const PALETTE_KEY = 'toon-squid-palette';
 
@@ -354,6 +356,11 @@ const BrushSettings: React.FC = () => {
           Opacity
         </label>
       </div>
+
+      {/* Brush Studio */}
+      <Suspense fallback={null}>
+        <BrushStudio />
+      </Suspense>
     </div>
   );
 };
