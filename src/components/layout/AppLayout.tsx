@@ -49,6 +49,7 @@ function RightPanel() {
   if (appMode === 'rig') {
     return (
       <Suspense fallback={<Placeholder name="Loading..." />}>
+        <LayerPanel />
         <BoneTreePanel />
         <BoneProperties />
       </Suspense>

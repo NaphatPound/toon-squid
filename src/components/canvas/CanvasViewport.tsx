@@ -656,22 +656,30 @@ function CanvasViewport() {
       }
 
       const boneStore = useBoneStore.getState();
+      let newBoneId: string;
 
       if (parentId) {
         // Child bone: compute local coords relative to parent
         const worldBones = getWorldBones();
         const parentWorld = worldBones.find((b) => b.id === parentId);
         if (parentWorld) {
-          // localX/localY: parent tip in parent's local space = (parent.length, 0)
           const localX = parentWorld.length;
           const localY = 0;
-          // localRotation: world angle minus parent's world rotation
           const localRotation = rotation - parentWorld.worldRotation;
-          boneStore.addBone(parentId, localX, localY, length, localRotation);
+          newBoneId = boneStore.addBone(parentId, localX, localY, length, localRotation);
+        } else {
+          newBoneId = boneStore.addBone(parentId, 0, 0, length, rotation);
         }
       } else {
         // Root bone at start position
-        boneStore.addBone(null, startPt.x, startPt.y, length, rotation);
+        newBoneId = boneStore.addBone(null, startPt.x, startPt.y, length, rotation);
+      }
+
+      // Auto-bind to active layer and auto-weight
+      const { activeLayerId } = useDrawingStore.getState();
+      if (activeLayerId && newBoneId) {
+        boneStore.bindLayerToBone(newBoneId, activeLayerId);
+        boneStore.autoWeightLayer(activeLayerId);
       }
 
       engine?.invalidate();

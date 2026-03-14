@@ -36,6 +36,7 @@ interface BoneState {
   updateBindingWeight: (boneId: string, layerId: string, weight: number) => void;
   getBindingsForLayer: (layerId: string) => BoneLayerBinding[];
   getBindingsForBone: (boneId: string) => BoneLayerBinding[];
+  autoWeightLayer: (layerId: string) => void;
 }
 
 export const useBoneStore = create<BoneState>((set, get) => ({
@@ -229,4 +230,66 @@ export const useBoneStore = create<BoneState>((set, get) => ({
 
   getBindingsForBone: (boneId) =>
     get().bindings.filter((b) => b.boneId === boneId),
+
+  autoWeightLayer: (layerId) => {
+    const { skeleton, bindings } = get();
+    if (!skeleton) return;
+
+    const layerBindings = bindings.filter((b) => b.layerId === layerId);
+    if (layerBindings.length <= 1) {
+      // Single bone → weight = 1.0
+      if (layerBindings.length === 1) {
+        set((s) => ({
+          bindings: s.bindings.map((b) =>
+            b.layerId === layerId ? { ...b, weight: 1.0 } : b
+          ),
+        }));
+      }
+      return;
+    }
+
+    // Compute world transforms for distance calculation
+    const worldBones = computeWorldTransforms(skeleton.bones);
+
+    // Find the center of all bound bones' bind positions as reference
+    let cx = 0, cy = 0;
+    for (const lb of layerBindings) {
+      cx += lb.bindWorldX;
+      cy += lb.bindWorldY;
+    }
+    cx /= layerBindings.length;
+    cy /= layerBindings.length;
+
+    // Compute inverse-distance weights from each bone to the center
+    const epsilon = 0.001;
+    const rawWeights: number[] = [];
+    for (const lb of layerBindings) {
+      const bone = worldBones.find((b) => b.id === lb.boneId);
+      if (!bone) {
+        rawWeights.push(epsilon);
+        continue;
+      }
+      // Use bone length as influence radius — longer bones get more weight
+      const boneInfluence = bone.length > 0 ? bone.length : 1;
+      // Inverse distance from bone midpoint to center
+      const midX = bone.worldX + Math.cos(bone.worldRotation) * bone.length * 0.5;
+      const midY = bone.worldY + Math.sin(bone.worldRotation) * bone.length * 0.5;
+      const dist = Math.sqrt((midX - cx) ** 2 + (midY - cy) ** 2);
+      rawWeights.push(boneInfluence / (dist + epsilon));
+    }
+
+    // Normalize so weights sum to 1
+    const total = rawWeights.reduce((s, w) => s + w, 0);
+
+    set((s) => ({
+      bindings: s.bindings.map((b) => {
+        if (b.layerId !== layerId) return b;
+        const idx = layerBindings.findIndex(
+          (lb) => lb.boneId === b.boneId && lb.layerId === b.layerId
+        );
+        if (idx < 0) return b;
+        return { ...b, weight: total > 0 ? rawWeights[idx] / total : 1 / layerBindings.length };
+      }),
+    }));
+  },
 }));
