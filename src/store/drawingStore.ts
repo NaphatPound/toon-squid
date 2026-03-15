@@ -13,6 +13,7 @@ function loadCustomBrushes(): CustomBrush[] {
       // Migrate: add imageStampId if missing
       for (const b of brushes) {
         if (b.imageStampId === undefined) b.imageStampId = '';
+        if (b.imageDataUrl === undefined) b.imageDataUrl = '';
       }
       // Remove old/obsolete image brushes from previous iterations
       const obsoleteIds = new Set(['stamp-leg', 'stamp-arm', 'stamp-head', 'stamp-body', 'tpl-arm', 'tpl-head', 'tpl-body']);
@@ -59,6 +60,7 @@ function createDefaultBrush(): CustomBrush {
     dualShape: 'circle',
     dualSizeRatio: 0.5,
     imageStampId: '',
+    imageDataUrl: '',
   };
 }
 

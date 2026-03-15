@@ -164,7 +164,7 @@ const customBrushRenderer = new CustomBrushRenderer({
   rotation: 'none', rotationAngle: 0, sizeJitter: 0, opacityJitter: 0,
   hardness: 0.8, roundness: 1, grainOpacity: 0, grainScale: 1,
   taperStart: 0.15, taperEnd: 0.15, pressureSize: true, pressureOpacity: false,
-  dualBrush: false, dualShape: 'circle', dualSizeRatio: 0.5, imageStampId: '',
+  dualBrush: false, dualShape: 'circle', dualSizeRatio: 0.5, imageStampId: '', imageDataUrl: '',
 });
 
 const RENDERERS: Record<BrushType, BrushRenderer> = {

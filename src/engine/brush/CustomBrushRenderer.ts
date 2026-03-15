@@ -2,7 +2,7 @@ import type { BrushSettings, CustomBrush, StampShape } from '../../types/drawing
 import type { StampPoint } from './DynamicStroke';
 import type { BrushRenderer } from './BrushEngine';
 import { clamp, distance } from '../../utils/math';
-import { getTemplateImage } from './ImageStamps';
+import { getBrushImage } from './ImageStamps';
 
 /**
  * Renders a single stamp shape at the given position.
@@ -146,7 +146,7 @@ export class CustomBrushRenderer implements BrushRenderer {
 
   /** Returns true if the current brush uses an image template. */
   isImageBrush(): boolean {
-    return this.brush.shape === 'image' && !!this.brush.imageStampId;
+    return this.brush.shape === 'image' && !!(this.brush.imageStampId || this.brush.imageDataUrl);
   }
 
   renderStamp(ctx: CanvasRenderingContext2D, stamp: StampPoint, settings: BrushSettings): void {
@@ -214,7 +214,7 @@ export class CustomBrushRenderer implements BrushRenderer {
     settings: BrushSettings
   ): void {
     const b = this.brush;
-    const img = getTemplateImage(b.imageStampId);
+    const img = getBrushImage(b.imageStampId, b.imageDataUrl);
     if (!img || stamps.length < 2) {
       this.renderStampsDefault(ctx, stamps, settings);
       return;

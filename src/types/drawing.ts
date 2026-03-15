@@ -70,8 +70,10 @@ export interface CustomBrush {
   dualShape: StampShape;
   /** Dual brush size ratio */
   dualSizeRatio: number;
-  /** Image stamp id (for shape === 'image') */
+  /** Image stamp id (for shape === 'image', built-in templates) */
   imageStampId: string;
+  /** User-uploaded image as data URL (for shape === 'image') */
+  imageDataUrl: string;
 }
 
 export interface Layer {

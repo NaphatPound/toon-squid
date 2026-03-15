@@ -1,13 +1,8 @@
 /**
  * Image template system for body-part brushes.
  *
- * Templates are VERTICAL images:
- *   Y-axis = along the body part (top → bottom, e.g. hip → foot)
- *   X-axis = width / thickness of the body part
- *
- * When rendered, the template is progressively "unrolled" along the
- * stroke path. The image bends to follow curves and stops once
- * the full template has been revealed (no repeating).
+ * Supports both built-in templates (loaded from public/) and
+ * user-uploaded images (stored as data URLs in the brush definition).
  */
 
 export interface ImageTemplateDef {
@@ -29,20 +24,19 @@ export function getTemplateDef(id: string): ImageTemplateDef | undefined {
 
 // --------------- image loading & caching ---------------
 
-/** Cached loaded images (template id → loaded HTMLImageElement) */
+/** Cached loaded images (key → loaded HTMLImageElement) */
 const imageCache = new Map<string, HTMLImageElement>();
-/** Templates currently being loaded */
+/** Currently loading */
 const loadingSet = new Set<string>();
 
 /**
- * Get a loaded image for the given template id.
+ * Get a loaded image for the given template id (built-in).
  * Returns null if the image hasn't been loaded yet (triggers async load).
  */
 export function getTemplateImage(templateId: string): HTMLImageElement | null {
-  const cached = imageCache.get(templateId);
+  const cached = imageCache.get(`tpl:${templateId}`);
   if (cached) return cached;
 
-  // Start loading if not already in progress
   if (!loadingSet.has(templateId)) {
     const def = getTemplateDef(templateId);
     if (!def) return null;
@@ -50,7 +44,7 @@ export function getTemplateImage(templateId: string): HTMLImageElement | null {
     loadingSet.add(templateId);
     const img = new Image();
     img.onload = () => {
-      imageCache.set(templateId, img);
+      imageCache.set(`tpl:${templateId}`, img);
       loadingSet.delete(templateId);
     };
     img.onerror = () => {
@@ -60,6 +54,48 @@ export function getTemplateImage(templateId: string): HTMLImageElement | null {
     img.src = def.url;
   }
 
+  return null;
+}
+
+/**
+ * Get a loaded image from a data URL (user-uploaded).
+ * Caches by a hash of the data URL prefix to avoid re-creating.
+ */
+export function getDataUrlImage(dataUrl: string): HTMLImageElement | null {
+  if (!dataUrl) return null;
+
+  // Use first 64 chars as cache key (sufficient for uniqueness)
+  const key = `data:${dataUrl.length}:${dataUrl.substring(0, 64)}`;
+  const cached = imageCache.get(key);
+  if (cached) return cached;
+
+  if (!loadingSet.has(key)) {
+    loadingSet.add(key);
+    const img = new Image();
+    img.onload = () => {
+      imageCache.set(key, img);
+      loadingSet.delete(key);
+    };
+    img.onerror = () => {
+      loadingSet.delete(key);
+    };
+    img.src = dataUrl;
+  }
+
+  return null;
+}
+
+/**
+ * Get the image for a brush — checks user-uploaded dataUrl first,
+ * then falls back to built-in template by id.
+ */
+export function getBrushImage(imageStampId: string, imageDataUrl: string): HTMLImageElement | null {
+  if (imageDataUrl) {
+    return getDataUrlImage(imageDataUrl);
+  }
+  if (imageStampId) {
+    return getTemplateImage(imageStampId);
+  }
   return null;
 }
 

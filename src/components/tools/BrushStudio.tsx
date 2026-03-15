@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import type { CustomBrush, StampShape } from '../../types/drawing';
 import { IMAGE_TEMPLATES } from '../../engine/brush/ImageStamps';
@@ -9,7 +9,7 @@ const SHAPES: { value: StampShape; label: string }[] = [
   { value: 'diamond', label: 'Diamond' },
   { value: 'star', label: 'Star' },
   { value: 'scatter-dots', label: 'Scatter' },
-  { value: 'image', label: 'Image Stamp' },
+  { value: 'image', label: 'Image Template' },
 ];
 
 const ROTATIONS: { value: string; label: string }[] = [
@@ -162,6 +162,16 @@ function SliderRow({ label, value, min, max, step, onChange, format }: {
   );
 }
 
+/** Get the preview URL for a brush's image (data URL or built-in) */
+function getBrushPreviewUrl(brush: CustomBrush): string | null {
+  if (brush.imageDataUrl) return brush.imageDataUrl;
+  if (brush.imageStampId) {
+    const tpl = IMAGE_TEMPLATES.find((t) => t.id === brush.imageStampId);
+    if (tpl) return tpl.url;
+  }
+  return null;
+}
+
 export default function BrushStudio() {
   const customBrushes = useDrawingStore((st) => st.customBrushes);
   const activeCustomBrushId = useDrawingStore((st) => st.activeCustomBrushId);
@@ -170,6 +180,7 @@ export default function BrushStudio() {
   const addCustomBrush = useDrawingStore((st) => st.addCustomBrush);
   const deleteCustomBrush = useDrawingStore((st) => st.deleteCustomBrush);
   const duplicateCustomBrush = useDrawingStore((st) => st.duplicateCustomBrush);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeBrush = customBrushes.find((b) => b.id === activeCustomBrushId) ?? null;
 
@@ -179,6 +190,29 @@ export default function BrushStudio() {
     },
     [activeCustomBrushId, updateCustomBrush]
   );
+
+  const handleImageUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        update({
+          imageDataUrl: dataUrl,
+          imageStampId: '', // clear built-in selection when uploading custom
+        });
+      };
+      reader.readAsDataURL(file);
+
+      // Reset so the same file can be re-uploaded
+      e.target.value = '';
+    },
+    [update]
+  );
+
+  const previewUrl = activeBrush ? getBrushPreviewUrl(activeBrush) : null;
 
   return (
     <div style={s.container}>
@@ -199,31 +233,47 @@ export default function BrushStudio() {
 
       {/* Brush list */}
       <div style={s.brushList}>
-        {customBrushes.map((brush) => (
-          <button
-            key={brush.id}
-            style={{
-              ...s.brushItem,
-              background: brush.id === activeCustomBrushId ? 'var(--active-bg, rgba(255, 255, 255, 0.08))' : 'transparent',
-              color: brush.id === activeCustomBrushId ? 'var(--text-primary, #e6edf3)' : 'var(--text-secondary, #8b949e)',
-            }}
-            onClick={() => setActiveCustomBrush(brush.id)}
-            onMouseEnter={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))'; }}
-            onMouseLeave={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'transparent'; }}
-          >
-            {brush.shape === 'image' ? (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <rect x="1" y="1" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1" />
-                <path d="M3 7l2-3 2 2 1-1 1 2" stroke="currentColor" strokeWidth="0.8" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <circle cx="5" cy="5" r="4" fill="currentColor" />
-              </svg>
-            )}
-            {brush.name}
-          </button>
-        ))}
+        {customBrushes.map((brush) => {
+          const thumbUrl = brush.shape === 'image' ? getBrushPreviewUrl(brush) : null;
+          return (
+            <button
+              key={brush.id}
+              style={{
+                ...s.brushItem,
+                background: brush.id === activeCustomBrushId ? 'var(--active-bg, rgba(255, 255, 255, 0.08))' : 'transparent',
+                color: brush.id === activeCustomBrushId ? 'var(--text-primary, #e6edf3)' : 'var(--text-secondary, #8b949e)',
+              }}
+              onClick={() => setActiveCustomBrush(brush.id)}
+              onMouseEnter={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))'; }}
+              onMouseLeave={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {thumbUrl ? (
+                <img
+                  src={thumbUrl}
+                  alt=""
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 2,
+                    objectFit: 'contain',
+                    background: 'var(--bg-tertiary, #161b22)',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : brush.shape === 'image' ? (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <rect x="1" y="1" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                  <path d="M3 7l2-3 2 2 1-1 1 2" stroke="currentColor" strokeWidth="0.8" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <circle cx="5" cy="5" r="4" fill="currentColor" />
+                </svg>
+              )}
+              {brush.name}
+            </button>
+          );
+        })}
       </div>
 
       {/* Editor for active brush */}
@@ -263,21 +313,114 @@ export default function BrushStudio() {
               {SHAPES.map((sh) => <option key={sh.value} value={sh.value}>{sh.label}</option>)}
             </select>
           </div>
+
+          {/* Image template controls */}
           {activeBrush.shape === 'image' && (
-            <div style={s.row}>
-              <span style={s.label}>Stamp</span>
-              <select
-                style={s.select}
-                value={activeBrush.imageStampId || ''}
-                onChange={(e) => update({ imageStampId: e.target.value })}
-              >
-                <option value="">None</option>
-                {IMAGE_TEMPLATES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              {/* Built-in template selector */}
+              <div style={s.row}>
+                <span style={s.label}>Built-in</span>
+                <select
+                  style={s.select}
+                  value={activeBrush.imageDataUrl ? '' : (activeBrush.imageStampId || '')}
+                  onChange={(e) => update({
+                    imageStampId: e.target.value,
+                    imageDataUrl: '', // clear custom upload when selecting built-in
+                  })}
+                >
+                  <option value="">None</option>
+                  {IMAGE_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Upload custom image */}
+              <div style={s.row}>
+                <span style={s.label}>Custom</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  style={{
+                    ...s.btn,
+                    flex: 1,
+                    background: 'var(--bg-tertiary, #161b22)',
+                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+                    fontSize: 10,
+                    gap: 4,
+                    height: 22,
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent-blue, #58a6ff)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.08))'; }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M5 2v6M2 5h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                  Upload Image
+                </button>
+                {activeBrush.imageDataUrl && (
+                  <button
+                    style={{ ...s.btn, color: 'var(--text-muted, #484f58)', flexShrink: 0 }}
+                    onClick={() => update({ imageDataUrl: '', imageStampId: '' })}
+                    title="Remove uploaded image"
+                    onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted, #484f58)'; }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Image preview */}
+              {previewUrl && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: 4,
+                  background: 'var(--bg-tertiary, #161b22)',
+                  borderRadius: 4,
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+                }}>
+                  <img
+                    src={previewUrl}
+                    alt="Brush template"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: 120,
+                      objectFit: 'contain',
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* No image hint */}
+              {!previewUrl && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 48,
+                  background: 'var(--bg-tertiary, #161b22)',
+                  borderRadius: 4,
+                  border: '1px dashed var(--border-color, rgba(255, 255, 255, 0.12))',
+                  fontSize: 10,
+                  color: 'var(--text-muted, #484f58)',
+                }}>
+                  Select built-in or upload an image
+                </div>
+              )}
+            </>
           )}
+
           {activeBrush.shape !== 'image' && (
             <>
               <SliderRow label="Roundness" value={activeBrush.roundness} min={0.1} max={1} step={0.05} onChange={(v) => update({ roundness: v })} />
