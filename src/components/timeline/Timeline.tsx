@@ -186,6 +186,7 @@ export default function Timeline() {
   const currentTime = useBoneStore((s) => s.currentTime);
   const setCurrentTime = useBoneStore((s) => s.setCurrentTime);
   const layers = useDrawingStore((s) => s.layers);
+  const addFrameLayer = useDrawingStore((s) => s.addFrameLayer);
 
   const framesRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
@@ -450,6 +451,25 @@ export default function Timeline() {
                 {layer.name}
               </div>
             ))}
+            {/* Add frame layer button */}
+            <div
+              style={{
+                ...styles.trackNameRow,
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--text-muted, #484f58)',
+                gap: 4,
+              }}
+              onClick={addFrameLayer}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-orange, #f0883e)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted, #484f58)'; }}
+              title="Add new frame layer"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              <span style={{ fontSize: 9 }}>Add Frame Layer</span>
+            </div>
           </div>
 
           {/* Frames area */}
