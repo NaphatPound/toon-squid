@@ -70,6 +70,7 @@ export default function PlaybackControls() {
   const animations = useBoneStore((s) => s.animations);
   const activeAnimationId = useBoneStore((s) => s.activeAnimationId);
   const addAnimation = useBoneStore((s) => s.addAnimation);
+  const updateAnimation = useBoneStore((s) => s.updateAnimation);
   const addPose = useBoneStore((s) => s.addPose);
   const skeleton = useBoneStore((s) => s.skeleton);
 
@@ -97,8 +98,8 @@ export default function PlaybackControls() {
         rotation: bone.localRotation,
         scaleX: bone.localScaleX,
         scaleY: bone.localScaleY,
-        translateX: 0,
-        translateY: 0,
+        translateX: bone.localX,
+        translateY: bone.localY,
       };
     }
     const pose: Pose = {
@@ -117,8 +118,14 @@ export default function PlaybackControls() {
     addPose(activeAnimation.id, pose);
   };
 
-  const handleFpsChange = (_newFps: number) => {
+  const handleFpsChange = (newFps: number) => {
     if (!activeAnimation) return;
+    updateAnimation(activeAnimation.id, { fps: newFps });
+  };
+
+  const handleToggleLoop = () => {
+    if (!activeAnimation) return;
+    updateAnimation(activeAnimation.id, { loop: !activeAnimation.loop });
   };
 
   return (
@@ -239,6 +246,7 @@ export default function PlaybackControls() {
           ...styles.btn,
           ...(activeAnimation?.loop ? styles.activeBtn : {}),
         }}
+        onClick={handleToggleLoop}
         title={activeAnimation?.loop ? 'Loop on' : 'Loop off'}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';

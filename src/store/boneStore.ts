@@ -26,6 +26,7 @@ interface BoneState {
   getChildBones: (parentId: string) => Bone[];
 
   addAnimation: (name: string, fps: number, duration: number) => void;
+  updateAnimation: (id: string, updates: Partial<Pick<Animation, 'name' | 'fps' | 'duration' | 'loop'>>) => void;
   setActiveAnimation: (id: string | null) => void;
   addPose: (animationId: string, pose: Pose) => void;
   removePose: (animationId: string, poseId: string) => void;
@@ -211,6 +212,13 @@ export const useBoneStore = create<BoneState>((set, get) => ({
         activeAnimationId: anim.id,
       };
     }),
+
+  updateAnimation: (id, updates) =>
+    set((s) => ({
+      animations: s.animations.map((a) =>
+        a.id === id ? { ...a, ...updates } : a
+      ),
+    })),
 
   setActiveAnimation: (id) => set({ activeAnimationId: id }),
 

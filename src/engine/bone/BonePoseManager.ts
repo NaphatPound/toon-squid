@@ -155,8 +155,8 @@ export function applyPose(
       localRotation: transform.rotation,
       localScaleX: transform.scaleX,
       localScaleY: transform.scaleY,
-      localX: bone.localX + transform.translateX,
-      localY: bone.localY + transform.translateY,
+      localX: transform.translateX,
+      localY: transform.translateY,
     };
   });
 }
