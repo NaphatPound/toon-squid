@@ -182,6 +182,8 @@ export default function Timeline() {
   const framesRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [dupTarget, setDupTarget] = useState<{ layerId: string; srcFrame: number } | null>(null);
+  // Multi-select: layerId → Set of selected frame numbers
+  const [selectedFrames, setSelectedFrames] = useState<Map<string, Set<number>>>(new Map());
 
   const activeAnimation = animations.find((a) => a.id === activeAnimationId) ?? null;
   const totalFrames = activeAnimation ? Math.ceil(activeAnimation.duration * activeAnimation.fps) : 24;
@@ -232,6 +234,89 @@ export default function Timeline() {
   );
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  const handleFrameClick = useCallback(
+    (e: React.MouseEvent, layerId: string, frame: number) => {
+      if (dupTarget && dupTarget.layerId === layerId) {
+        handleDuplicateTo(frame);
+        return;
+      }
+
+      setSelectedFrames((prev) => {
+        const next = new Map(prev);
+        const layerSet = new Set(next.get(layerId) ?? []);
+
+        if (e.ctrlKey || e.metaKey) {
+          // Toggle single frame
+          if (layerSet.has(frame)) layerSet.delete(frame);
+          else layerSet.add(frame);
+        } else if (e.shiftKey && layerSet.size > 0) {
+          // Range select from last selected to this frame
+          const existing = Array.from(layerSet);
+          const anchor = existing[existing.length - 1];
+          const lo = Math.min(anchor, frame);
+          const hi = Math.max(anchor, frame);
+          for (let i = lo; i <= hi; i++) layerSet.add(i);
+        } else {
+          // Single select (replace)
+          next.clear();
+          layerSet.clear();
+          layerSet.add(frame);
+        }
+
+        if (layerSet.size === 0) next.delete(layerId);
+        else next.set(layerId, layerSet);
+        return next;
+      });
+    },
+    [dupTarget, handleDuplicateTo],
+  );
+
+  const getSelectedForLayer = useCallback(
+    (layerId: string): Set<number> => selectedFrames.get(layerId) ?? new Set(),
+    [selectedFrames],
+  );
+
+  const hasSelection = selectedFrames.size > 0 && Array.from(selectedFrames.values()).some((s) => s.size > 0);
+
+  const handleDeleteSelected = useCallback(() => {
+    for (const [layerId, frames] of selectedFrames) {
+      const layer = layers.find((l) => l.id === layerId);
+      for (const frame of frames) {
+        if (layer?.canvas && frame === currentFrame) {
+          const ctx = layer.canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+        }
+        deleteFrame(layerId, frame);
+      }
+    }
+    setSelectedFrames(new Map());
+    setCtxMenu(null);
+  }, [selectedFrames, layers, currentFrame]);
+
+  const handleDuplicateSelectedToNext = useCallback(() => {
+    for (const [layerId, frames] of selectedFrames) {
+      const layer = layers.find((l) => l.id === layerId);
+      if (!layer?.canvas) continue;
+
+      // Sort frames ascending
+      const sorted = Array.from(frames).sort((a, b) => a - b);
+      // Save current canvas
+      saveFrame(layerId, currentFrame, layer.canvas);
+
+      for (const srcFrame of sorted) {
+        const targetFrame = srcFrame + 1;
+        if (targetFrame >= totalFrames) continue;
+        restoreFrame(layerId, srcFrame, layer.canvas);
+        saveFrame(layerId, targetFrame, layer.canvas);
+      }
+
+      // Restore current frame
+      restoreFrame(layerId, currentFrame, layer.canvas);
+    }
+    setSelectedFrames(new Map());
+    setCtxMenu(null);
+  }, [selectedFrames, layers, currentFrame, totalFrames]);
 
   const handleDuplicateStart = useCallback(() => {
     if (!ctxMenu) return;
@@ -289,15 +374,21 @@ export default function Timeline() {
     setCtxMenu(null);
   }, [ctxMenu, layers, currentFrame]);
 
-  // Esc to cancel duplicate mode
+  // Esc to cancel duplicate mode / clear selection
   useEffect(() => {
-    if (!dupTarget) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDupTarget(null);
+      if (e.key === 'Escape') {
+        if (dupTarget) setDupTarget(null);
+        else if (hasSelection) setSelectedFrames(new Map());
+      }
+      // Delete key to delete selected frames
+      if ((e.key === 'Delete' || e.key === 'Backspace') && hasSelection) {
+        handleDeleteSelected();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dupTarget]);
+  }, [dupTarget, hasSelection, handleDeleteSelected]);
 
   // Render ruler frame markers
   const rulerMarkers: React.ReactNode[] = [];
@@ -404,12 +495,14 @@ export default function Timeline() {
               {/* Frame layer tracks */}
               {frameLayers.map((layer) => {
                 const drawnFrames = new Set(getLayerFrames(layer.id));
+                const selected = getSelectedForLayer(layer.id);
 
                 return (
                   <div key={layer.id} style={styles.trackRow}>
                     {Array.from({ length: totalFrames }, (_, i) => {
                       const has = drawnFrames.has(i);
                       const isCurrent = i === currentFrame;
+                      const isSelected = selected.has(i);
                       const isDupSrc = dupTarget?.layerId === layer.id && dupTarget.srcFrame === i;
 
                       return (
@@ -418,20 +511,17 @@ export default function Timeline() {
                           style={{
                             ...(has ? styles.frameMarker : styles.frameMarkerEmpty),
                             left: i * FRAME_WIDTH + FRAME_WIDTH / 2 - 7,
-                            ...(isCurrent ? { outline: '2px solid var(--accent-blue, #58a6ff)' } : {}),
+                            ...(isSelected ? { outline: '2px solid #bc8cff', outlineOffset: 1 } : {}),
+                            ...(isCurrent && !isSelected ? { outline: '2px solid var(--accent-blue, #58a6ff)' } : {}),
                             ...(isDupSrc ? { outline: '2px solid #fff' } : {}),
                             ...(dupTarget && dupTarget.layerId === layer.id && !isDupSrc ? { cursor: 'copy' } : {}),
                           }}
                           title={
                             dupTarget && dupTarget.layerId === layer.id && !isDupSrc
                               ? `Paste frame ${dupTarget.srcFrame} here`
-                              : has ? `Frame ${i} (right-click for options)` : `Frame ${i} (empty)`
+                              : has ? `Frame ${i} (click to select, right-click for options)` : `Frame ${i} (empty)`
                           }
-                          onClick={() => {
-                            if (dupTarget && dupTarget.layerId === layer.id) {
-                              handleDuplicateTo(i);
-                            }
-                          }}
+                          onClick={(e) => handleFrameClick(e, layer.id, i)}
                           onContextMenu={(e) => handleFrameContextMenu(e, layer.id, i)}
                         />
                       );
@@ -461,6 +551,30 @@ export default function Timeline() {
           style={{ ...styles.contextMenu, left: ctxMenu.x, top: ctxMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Multi-select actions */}
+          {hasSelection && (
+            <>
+              <button
+                style={styles.contextMenuItem}
+                onClick={handleDuplicateSelectedToNext}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.06))'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Duplicate selected to next frames
+              </button>
+              <button
+                style={{ ...styles.contextMenuItem, color: '#f85149' }}
+                onClick={handleDeleteSelected}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.06))'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                Delete selected frames
+              </button>
+              <div style={{ height: 1, background: 'var(--border-color, rgba(255, 255, 255, 0.08))', margin: '2px 0' }} />
+            </>
+          )}
+
+          {/* Single frame actions */}
           {ctxMenu.hasData && ctxMenu.frame + 1 < totalFrames && (
             <button
               style={styles.contextMenuItem}
@@ -491,7 +605,7 @@ export default function Timeline() {
               Clear frame {ctxMenu.frame}
             </button>
           )}
-          {!ctxMenu.hasData && (
+          {!ctxMenu.hasData && !hasSelection && (
             <div style={{ ...styles.contextMenuItem, color: 'var(--text-muted, #484f58)', cursor: 'default' }}>
               Empty frame
             </div>
