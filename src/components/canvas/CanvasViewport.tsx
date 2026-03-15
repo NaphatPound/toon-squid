@@ -748,6 +748,39 @@ function CanvasViewport() {
       if (boneSetupModeRef.current && dragBoneIdRef.current) {
         useBoneStore.getState().updateBindPose(dragBoneIdRef.current);
       }
+
+      // Auto-record keyframe when bone is adjusted in animate mode
+      const boneState = useBoneStore.getState();
+      if (boneState.autoRecord && boneState.activeAnimationId && boneState.skeleton
+        && useUIStore.getState().appMode === 'animate' && !boneSetupModeRef.current) {
+        const anim = boneState.animations.find((a) => a.id === boneState.activeAnimationId);
+        if (anim) {
+          const boneTransforms: Record<string, import('../../types/bone').BoneTransform> = {};
+          for (const bone of boneState.skeleton.bones) {
+            boneTransforms[bone.id] = {
+              rotation: bone.localRotation,
+              scaleX: bone.localScaleX,
+              scaleY: bone.localScaleY,
+              translateX: bone.localX,
+              translateY: bone.localY,
+            };
+          }
+          // Replace existing pose at same time
+          const existing = anim.poses.find(
+            (p) => Math.abs(p.time - boneState.currentTime) < 0.001
+          );
+          if (existing) {
+            boneState.removePose(anim.id, existing.id);
+          }
+          boneState.addPose(anim.id, {
+            id: generateId(),
+            name: `Pose @ ${boneState.currentTime.toFixed(2)}s`,
+            time: boneState.currentTime,
+            boneTransforms,
+          });
+        }
+      }
+
       dragBoneIdRef.current = null;
       boneSetupModeRef.current = false;
       drawCursor(nativeEvent.clientX, nativeEvent.clientY);

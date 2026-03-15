@@ -73,6 +73,8 @@ export default function PlaybackControls() {
   const updateAnimation = useBoneStore((s) => s.updateAnimation);
   const addPose = useBoneStore((s) => s.addPose);
   const skeleton = useBoneStore((s) => s.skeleton);
+  const autoRecord = useBoneStore((s) => s.autoRecord);
+  const setAutoRecord = useBoneStore((s) => s.setAutoRecord);
 
   const activeAnimation = animations.find((a) => a.id === activeAnimationId) ?? null;
   const fps = activeAnimation?.fps ?? 24;
@@ -211,6 +213,32 @@ export default function PlaybackControls() {
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <circle cx="6" cy="6" r="5" fill="currentColor" />
+          </svg>
+        </button>
+      )}
+
+      {/* Auto Record toggle */}
+      {activeAnimation && (
+        <button
+          style={{
+            ...styles.btn,
+            color: autoRecord ? '#f85149' : 'var(--text-secondary, #8b949e)',
+            background: autoRecord ? 'rgba(248, 81, 73, 0.12)' : 'transparent',
+            borderRadius: 4,
+          }}
+          onClick={() => setAutoRecord(!autoRecord)}
+          title={autoRecord ? 'Auto Record ON — bone changes auto-record keyframes' : 'Auto Record OFF'}
+          onMouseEnter={(e) => {
+            if (!autoRecord) e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
+          }}
+          onMouseLeave={(e) => {
+            if (!autoRecord) e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="4" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="7" cy="7" r="2" fill="currentColor" />
+            <path d="M7 1v2M7 11v2M1 7h2M11 7h2" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
           </svg>
         </button>
       )}

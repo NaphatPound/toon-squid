@@ -32,6 +32,8 @@ interface BoneState {
   removePose: (animationId: string, poseId: string) => void;
   setCurrentTime: (time: number) => void;
   setIsPlaying: (playing: boolean) => void;
+  autoRecord: boolean;
+  setAutoRecord: (on: boolean) => void;
 
   bindLayerToBone: (boneId: string, layerId: string) => void;
   removeBinding: (boneId: string, layerId: string) => void;
@@ -240,6 +242,8 @@ export const useBoneStore = create<BoneState>((set, get) => ({
 
   setCurrentTime: (time) => set({ currentTime: time }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
+  autoRecord: false,
+  setAutoRecord: (on) => set({ autoRecord: on }),
 
   bindLayerToBone: (boneId, layerId) => {
     const { skeleton, bindings } = get();
