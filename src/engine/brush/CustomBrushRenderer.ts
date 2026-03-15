@@ -216,28 +216,17 @@ export class CustomBrushRenderer implements BrushRenderer {
     const b = this.brush;
     const img = getTemplateImage(b.imageStampId);
     if (!img || stamps.length < 2) {
-      // Image not loaded yet or single point – fallback
       this.renderStampsDefault(ctx, stamps, settings);
       return;
     }
 
     const imgW = img.naturalWidth;
     const imgH = img.naturalHeight;
-
-    // Use a constant brush width (settings.size) so the template
-    // renders with uniform thickness — no pressure / velocity /
-    // taper variation.  This keeps the image smooth and clean.
     const brushWidth = settings.size;
-
-    // Scale factor: image X (imgW) maps to brushWidth pixels on canvas.
-    // So image Y (imgH) maps to:
-    //   mappedLength = imgH × (brushWidth / imgW)
-    // This is how many canvas-pixels of stroke it takes to reveal
-    // the entire template at the current brush size.
     const scale = brushWidth / imgW;
     const mappedLength = imgH * scale;
 
-    // Calculate cumulative distances along the stroke
+    // Calculate segment lengths
     const segLengths: number[] = [0];
     let totalLength = 0;
     for (let i = 1; i < stamps.length; i++) {
@@ -246,17 +235,22 @@ export class CustomBrushRenderer implements BrushRenderer {
       totalLength += d;
     }
 
-    // How much of the stroke to actually draw (stop at mappedLength)
     const drawLength = Math.min(totalLength, mappedLength);
     if (drawLength < 1) return;
 
-    ctx.save();
-    ctx.globalAlpha = clamp(settings.opacity, 0, 1);
+    // Render onto a temp canvas so that within the stroke, earlier
+    // slices (start of the image) stay on top of later slices.
+    // We use 'destination-over' which draws BEHIND existing pixels.
+    const canvasW = ctx.canvas.width;
+    const canvasH = ctx.canvas.height;
+    const tmp = new OffscreenCanvas(canvasW, canvasH);
+    const tctx = tmp.getContext('2d');
+    if (!tctx) return;
 
     let distSoFar = 0;
 
     for (let i = 1; i < stamps.length; i++) {
-      if (distSoFar >= drawLength) break; // full image revealed, stop
+      if (distSoFar >= drawLength) break;
 
       const ax = stamps[i - 1].x;
       const ay = stamps[i - 1].y;
@@ -266,42 +260,36 @@ export class CustomBrushRenderer implements BrushRenderer {
 
       if (segLen < 0.5) { distSoFar += segLen; continue; }
 
-      // Clamp segment if it would overshoot the template
       const remaining = drawLength - distSoFar;
       const usedLen = Math.min(segLen, remaining);
-
       const angle = Math.atan2(by - ay, bx - ax);
 
-      // Source rect in the VERTICAL template image:
-      //   srcY = how far along the image we've progressed
-      //   srcH = how much of the image this segment covers
       const srcY = (distSoFar / mappedLength) * imgH;
       const srcH = (usedLen / mappedLength) * imgH;
 
-      // Transform so that:
-      //   canvas-Y axis → stroke direction
-      //   canvas-X axis → perpendicular to stroke
-      // rotate(angle - PI/2) achieves this because:
-      //   after rotate(θ), canvas-X points in direction θ
-      //   angle - PI/2 makes canvas-X point perpendicular to stroke
-      //   and canvas-Y points in direction (angle - PI/2 + PI/2) = angle = stroke dir
-      ctx.save();
-      ctx.translate(ax, ay);
-      ctx.rotate(angle - Math.PI / 2);
+      // After the very first slice, switch to destination-over so
+      // each new slice is drawn BEHIND the already-drawn ones.
+      if (distSoFar > 0) {
+        tctx.globalCompositeOperation = 'destination-over';
+      }
 
-      // drawImage maps:
-      //   source X (image width) → dest X (perpendicular to stroke)
-      //   source Y (image height) → dest Y (along stroke)
-      ctx.drawImage(
+      tctx.save();
+      tctx.translate(ax, ay);
+      tctx.rotate(angle - Math.PI / 2);
+      tctx.drawImage(
         img,
-        0, srcY, imgW, Math.max(1, srcH),                    // source strip
-        -brushWidth / 2, 0, brushWidth, usedLen + 0.5        // dest – uniform width
+        0, srcY, imgW, Math.max(1, srcH),
+        -brushWidth / 2, 0, brushWidth, usedLen + 0.5
       );
-      ctx.restore();
+      tctx.restore();
 
       distSoFar += segLen;
     }
 
+    // Composite the temp canvas onto the real layer canvas (source-over)
+    ctx.save();
+    ctx.globalAlpha = clamp(settings.opacity, 0, 1);
+    ctx.drawImage(tmp, 0, 0);
     ctx.restore();
   }
 
