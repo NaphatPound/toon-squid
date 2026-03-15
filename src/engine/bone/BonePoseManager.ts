@@ -97,21 +97,19 @@ export function getPoseAtTime(
     return {};
   }
 
-  // Exactly at first keyframe
-  if (sorted.length === 1 || evalTime <= sorted[0].time) {
-    // With only one keyframe, only apply it at its exact time
-    // (within half-frame tolerance)
-    const frameDur = 1 / animation.fps;
-    if (sorted.length === 1 && Math.abs(evalTime - sorted[0].time) > frameDur * 0.5) {
-      return {};
-    }
+  // Only one keyframe: at or after it → hold that pose
+  if (sorted.length === 1) {
     return { ...sorted[0].boneTransforms };
   }
 
-  // After last keyframe
+  // At or before first keyframe
+  if (evalTime <= sorted[0].time) {
+    return { ...sorted[0].boneTransforms };
+  }
+
+  // After last keyframe → hold last pose (or loop back)
   if (evalTime > sorted[sorted.length - 1].time) {
-    if (animation.loop && sorted.length >= 2) {
-      // Interpolate from last keyframe back to first for looping
+    if (animation.loop) {
       const lastPose = sorted[sorted.length - 1];
       const firstPose = sorted[0];
       const segmentDuration = animation.duration - lastPose.time + firstPose.time;
@@ -121,8 +119,7 @@ export function getPoseAtTime(
         return interpolatePoses(lastPose, firstPose, clamp(segmentT, 0, 1));
       }
     }
-    // Non-looping: no effect after last keyframe → rest pose
-    return {};
+    return { ...sorted[sorted.length - 1].boneTransforms };
   }
 
   // Find surrounding keyframes
