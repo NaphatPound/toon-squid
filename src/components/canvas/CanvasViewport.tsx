@@ -98,8 +98,13 @@ function CanvasViewport() {
 
         let bones = skeleton?.bones ?? [];
 
-        // Apply animation pose in animate mode (or while playing)
-        if (bones.length > 0 && activeAnimationId) {
+        // Apply animation pose when playing or scrubbing the timeline.
+        // Skip while the user is actively dragging a bone so their
+        // edits are not immediately overwritten by the stored pose.
+        const isDraggingBone = modeRef.current === 'bone-move'
+          || modeRef.current === 'bone-rotate'
+          || modeRef.current === 'bone-resize';
+        if (bones.length > 0 && activeAnimationId && !isDraggingBone) {
           const anim = animations.find((a) => a.id === activeAnimationId);
           if (anim && anim.poses.length > 0) {
             const transforms = getPoseAtTime(anim, currentTime);
