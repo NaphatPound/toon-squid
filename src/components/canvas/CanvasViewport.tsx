@@ -8,6 +8,7 @@ import { normalizePointerEvent, getCoalescedPoints, resetInputState } from '../.
 import { generateId, Matrix2D, Vec2 } from '../../utils/math';
 import { renderCursorOverlay } from './CanvasOverlay';
 import { computeWorldTransforms, hitTestBone, hitTestBoneJoint, hitTestBoneTip, getBoneTip } from '../../engine/bone/BoneSystem';
+import { solveIK } from '../../engine/bone/IKSolver';
 import { getPoseAtTime, applyPose } from '../../engine/bone/BonePoseManager';
 import { preloadAllTemplates } from '../../engine/brush/ImageStamps';
 import type { Point } from '../../types/drawing';
@@ -35,7 +36,7 @@ const canvasBaseStyle: React.CSSProperties = {
   display: 'block',
 };
 
-type InteractionMode = 'none' | 'pan' | 'draw' | 'bone-create' | 'bone-move' | 'bone-rotate' | 'bone-resize';
+type InteractionMode = 'none' | 'pan' | 'draw' | 'bone-create' | 'bone-move' | 'bone-rotate' | 'bone-resize' | 'ik-drag';
 
 function CanvasViewport() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,6 +61,8 @@ function CanvasViewport() {
   // For bone creation: start position in doc coords and parent info
   const boneCreateStartRef = useRef({ x: 0, y: 0 });
   const boneCreateParentIdRef = useRef<string | null>(null);
+  // IK chain for ik-drag mode
+  const ikChainRef = useRef<string[]>([]);
 
   // --- Initialization ---
   useEffect(() => {
@@ -103,7 +106,8 @@ function CanvasViewport() {
         // edits are not immediately overwritten by the stored pose.
         const isDraggingBone = modeRef.current === 'bone-move'
           || modeRef.current === 'bone-rotate'
-          || modeRef.current === 'bone-resize';
+          || modeRef.current === 'bone-resize'
+          || modeRef.current === 'ik-drag';
         if (bones.length > 0 && activeAnimationId && !isDraggingBone) {
           const anim = animations.find((a) => a.id === activeAnimationId);
           if (anim && anim.poses.length > 0) {
@@ -503,6 +507,56 @@ function CanvasViewport() {
       return;
     }
 
+    // --- IK tool ---
+    if (tool === 'ik' && (appMode === 'rig' || appMode === 'animate')) {
+      const boneStore = useBoneStore.getState();
+      const worldBones = getWorldBones();
+      const hitThreshold = BONE_HIT_THRESHOLD / engine.viewport.zoom;
+
+      // Hit any bone → start IK drag
+      const hit = hitTestBoneTip(worldBones, docPt.x, docPt.y, hitThreshold)
+        ?? hitTestBoneJoint(worldBones, docPt.x, docPt.y, hitThreshold)
+        ?? hitTestBone(worldBones, docPt.x, docPt.y, hitThreshold);
+      if (hit) {
+        boneStore.selectBone(hit.id);
+
+        // Build chain from hit bone up to root
+        const chain: string[] = [];
+        let current: Bone | undefined = worldBones.find((b) => b.id === hit.id);
+        while (current) {
+          chain.unshift(current.id);
+          current = current.parentId ? worldBones.find((b) => b.id === current!.parentId) : undefined;
+        }
+        ikChainRef.current = chain;
+
+        // Sync bones to current pose in animate mode
+        if (appMode === 'animate' && boneStore.activeAnimationId) {
+          const anim = boneStore.animations.find((a) => a.id === boneStore.activeAnimationId);
+          if (anim && anim.poses.length > 0) {
+            const transforms = getPoseAtTime(anim, boneStore.currentTime);
+            for (const boneId of chain) {
+              const t = transforms[boneId];
+              if (t) {
+                boneStore.updateBone(boneId, {
+                  localRotation: t.rotation,
+                  localScaleX: t.scaleX,
+                  localScaleY: t.scaleY,
+                  localX: t.translateX,
+                  localY: t.translateY,
+                });
+              }
+            }
+          }
+        }
+
+        modeRef.current = 'ik-drag';
+        dragBoneIdRef.current = hit.id;
+        capture();
+        engine.invalidate();
+        return;
+      }
+    }
+
     // --- Select tool ---
     if (tool === 'select') {
       useUIStore.getState().setCursorPosition(docPt.x, docPt.y);
@@ -636,6 +690,26 @@ function CanvasViewport() {
       return;
     }
 
+    // --- IK drag ---
+    if (mode === 'ik-drag' && dragBoneIdRef.current && ikChainRef.current.length >= 2) {
+      const boneStore = useBoneStore.getState();
+      const skeleton = boneStore.skeleton;
+      if (skeleton) {
+        const solved = solveIK(skeleton.bones, ikChainRef.current, docPt.x, docPt.y);
+        // Apply solved rotations back to the store
+        for (const solvedBone of solved) {
+          if (ikChainRef.current.includes(solvedBone.id)) {
+            boneStore.updateBone(solvedBone.id, {
+              localRotation: solvedBone.localRotation,
+            });
+          }
+        }
+        engine.invalidate();
+        drawCursor(nativeEvent.clientX, nativeEvent.clientY);
+        return;
+      }
+    }
+
     // --- Brush drawing ---
     if (mode === 'draw' && brushEngine.getIsDrawing()) {
       const coalescedPoints = getCoalescedPoints(nativeEvent);
@@ -743,7 +817,7 @@ function CanvasViewport() {
     }
 
     // --- Bone move/rotate/resize end ---
-    if (mode === 'bone-move' || mode === 'bone-rotate' || mode === 'bone-resize') {
+    if (mode === 'bone-move' || mode === 'bone-rotate' || mode === 'bone-resize' || mode === 'ik-drag') {
       // In setup mode (Shift held), update bind pose so image stays in place
       if (boneSetupModeRef.current && dragBoneIdRef.current) {
         useBoneStore.getState().updateBindPose(dragBoneIdRef.current);
