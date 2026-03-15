@@ -428,6 +428,15 @@ export default function Timeline() {
         <div style={styles.body}>
           {/* Track names column */}
           <div style={styles.trackNames}>
+            {/* Spacer matching the ruler height so rows align with frames */}
+            <div style={{
+              height: RULER_HEIGHT,
+              flexShrink: 0,
+              borderBottomWidth: 1,
+              borderBottomStyle: 'solid' as const,
+              borderBottomColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
+              background: 'var(--bg-tertiary, #161b22)',
+            }} />
             {bones.map((bone) => (
               <div key={bone.id} style={styles.trackNameRow}>
                 {bone.name}
