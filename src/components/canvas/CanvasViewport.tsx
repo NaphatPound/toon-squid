@@ -902,7 +902,7 @@ function CanvasViewport() {
       const points = brushEngine.endStroke();
       if (points.length > 0) {
         const layerCtx = getActiveLayerCtx();
-        const { brushType, brushSettings, activeLayerId, addStroke } = useDrawingStore.getState();
+        const { brushType, brushSettings, activeLayerId, addStroke, layers } = useDrawingStore.getState();
 
         if (layerCtx) {
           brushEngine.renderStrokeToCanvas(layerCtx, points, brushType, brushSettings);
@@ -915,6 +915,16 @@ function CanvasViewport() {
           brushSettings: { ...brushSettings },
           layerId: activeLayerId,
         });
+
+        // Auto-save frame data for frame-by-frame layers after drawing
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer?.isFrameByFrame && activeLayer.canvas) {
+          const { currentTime, animations, activeAnimationId } = useBoneStore.getState();
+          const anim = animations.find((a) => a.id === activeAnimationId);
+          const frameFps = anim?.fps ?? 24;
+          const frame = Math.round(currentTime * frameFps);
+          saveFrame(activeLayerId, frame, activeLayer.canvas);
+        }
 
         engine.invalidate();
       }

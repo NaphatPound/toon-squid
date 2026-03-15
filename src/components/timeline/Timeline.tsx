@@ -261,6 +261,23 @@ export default function Timeline() {
     [dupTarget, layers, currentFrame],
   );
 
+  const handleDupToNextFrame = useCallback(() => {
+    if (!ctxMenu) return;
+    const layer = layers.find((l) => l.id === ctxMenu.layerId);
+    if (!layer?.canvas) { setCtxMenu(null); return; }
+    const nextFrame = ctxMenu.frame + 1;
+    if (nextFrame >= totalFrames) { setCtxMenu(null); return; }
+
+    // Save current canvas first
+    saveFrame(layer.id, currentFrame, layer.canvas);
+    // Copy source frame to next frame
+    restoreFrame(ctxMenu.layerId, ctxMenu.frame, layer.canvas);
+    saveFrame(ctxMenu.layerId, nextFrame, layer.canvas);
+    // Restore current frame
+    restoreFrame(layer.id, currentFrame, layer.canvas);
+    setCtxMenu(null);
+  }, [ctxMenu, layers, currentFrame, totalFrames]);
+
   const handleClearFrame = useCallback(() => {
     if (!ctxMenu) return;
     const layer = layers.find((l) => l.id === ctxMenu.layerId);
@@ -386,15 +403,12 @@ export default function Timeline() {
 
               {/* Frame layer tracks */}
               {frameLayers.map((layer) => {
-                const drawnFrames = getLayerFrames(layer.id);
-                // Also include current frame if canvas has content
-                const allFrames = new Set(drawnFrames);
-                if (currentFrame >= 0) allFrames.add(currentFrame);
+                const drawnFrames = new Set(getLayerFrames(layer.id));
 
                 return (
                   <div key={layer.id} style={styles.trackRow}>
                     {Array.from({ length: totalFrames }, (_, i) => {
-                      const has = allFrames.has(i) && hasFrameData(layer.id, i);
+                      const has = drawnFrames.has(i);
                       const isCurrent = i === currentFrame;
                       const isDupSrc = dupTarget?.layerId === layer.id && dupTarget.srcFrame === i;
 
@@ -404,8 +418,8 @@ export default function Timeline() {
                           style={{
                             ...(has ? styles.frameMarker : styles.frameMarkerEmpty),
                             left: i * FRAME_WIDTH + FRAME_WIDTH / 2 - 7,
-                            ...(isCurrent && !has ? { borderColor: 'var(--accent-orange, #f0883e)', borderStyle: 'solid' } : {}),
-                            ...(isDupSrc ? { outline: '2px solid var(--accent-blue, #58a6ff)' } : {}),
+                            ...(isCurrent ? { outline: '2px solid var(--accent-blue, #58a6ff)' } : {}),
+                            ...(isDupSrc ? { outline: '2px solid #fff' } : {}),
                             ...(dupTarget && dupTarget.layerId === layer.id && !isDupSrc ? { cursor: 'copy' } : {}),
                           }}
                           title={
@@ -447,6 +461,16 @@ export default function Timeline() {
           style={{ ...styles.contextMenu, left: ctxMenu.x, top: ctxMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
+          {ctxMenu.hasData && ctxMenu.frame + 1 < totalFrames && (
+            <button
+              style={styles.contextMenuItem}
+              onClick={handleDupToNextFrame}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.06))'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              Duplicate to next frame ({ctxMenu.frame + 1})
+            </button>
+          )}
           {ctxMenu.hasData && (
             <button
               style={styles.contextMenuItem}
@@ -454,7 +478,7 @@ export default function Timeline() {
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.06))'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              Duplicate frame {ctxMenu.frame} to...
+              Duplicate to frame...
             </button>
           )}
           {ctxMenu.hasData && (
