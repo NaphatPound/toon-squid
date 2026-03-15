@@ -107,18 +107,8 @@ export function getPoseAtTime(
     return { ...sorted[0].boneTransforms };
   }
 
-  // After last keyframe → hold last pose (or loop back)
-  if (evalTime > sorted[sorted.length - 1].time) {
-    if (animation.loop) {
-      const lastPose = sorted[sorted.length - 1];
-      const firstPose = sorted[0];
-      const segmentDuration = animation.duration - lastPose.time + firstPose.time;
-
-      if (segmentDuration > 0) {
-        const segmentT = (evalTime - lastPose.time) / segmentDuration;
-        return interpolatePoses(lastPose, firstPose, clamp(segmentT, 0, 1));
-      }
-    }
+  // After last keyframe → always hold last pose
+  if (evalTime >= sorted[sorted.length - 1].time) {
     return { ...sorted[sorted.length - 1].boneTransforms };
   }
 
