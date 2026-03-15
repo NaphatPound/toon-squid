@@ -210,6 +210,25 @@ export default function LayerItem({ layer, isActive }: LayerItemProps) {
         </span>
       )}
 
+      {/* Frame-by-frame indicator */}
+      {layer.isFrameByFrame && (
+        <span
+          title="Frame-by-frame layer"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            color: 'var(--accent-orange, #f0883e)',
+            flexShrink: 0,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <rect x="1" y="2.5" width="4" height="7" rx="0.5" stroke="currentColor" strokeWidth="0.9" />
+            <rect x="4.5" y="2.5" width="4" height="7" rx="0.5" stroke="currentColor" strokeWidth="0.9" />
+            <rect x="8" y="2.5" width="3" height="7" rx="0.5" stroke="currentColor" strokeWidth="0.9" />
+          </svg>
+        </span>
+      )}
+
       {/* Bone binding indicator */}
       {bindingCount > 0 && (
         <span

@@ -84,6 +84,8 @@ export interface Layer {
   opacity: number;
   blendMode: BlendMode;
   canvas: OffscreenCanvas | null;
+  /** If true, this layer has separate content per animation frame */
+  isFrameByFrame: boolean;
 }
 
 export type BlendMode =

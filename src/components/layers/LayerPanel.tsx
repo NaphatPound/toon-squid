@@ -77,6 +77,7 @@ export default function LayerPanel() {
   const layers = useDrawingStore((s) => s.layers);
   const activeLayerId = useDrawingStore((s) => s.activeLayerId);
   const addLayer = useDrawingStore((s) => s.addLayer);
+  const addFrameLayer = useDrawingStore((s) => s.addFrameLayer);
   const removeLayer = useDrawingStore((s) => s.removeLayer);
 
   const reversedLayers = [...layers].reverse();
@@ -85,23 +86,45 @@ export default function LayerPanel() {
     <div style={styles.panel}>
       <div style={styles.header}>
         <span style={styles.title}>Layers</span>
-        <button
-          style={styles.addBtn}
-          onClick={addLayer}
-          title="Add layer"
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--text-primary, #e6edf3)';
-            e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--text-secondary, #8b949e)';
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button
+            style={styles.addBtn}
+            onClick={addLayer}
+            title="Add layer"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary, #e6edf3)';
+              e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-secondary, #8b949e)';
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            style={styles.addBtn}
+            onClick={addFrameLayer}
+            title="Add frame-by-frame layer"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary, #e6edf3)';
+              e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-secondary, #8b949e)';
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="3" width="5" height="8" rx="0.5" stroke="currentColor" strokeWidth="1" />
+              <rect x="5" y="3" width="5" height="8" rx="0.5" stroke="currentColor" strokeWidth="1" />
+              <rect x="9" y="3" width="4" height="8" rx="0.5" stroke="currentColor" strokeWidth="1" />
+              <path d="M3.5 6v2M7.5 6v2" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div style={styles.list}>

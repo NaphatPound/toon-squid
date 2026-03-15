@@ -96,6 +96,7 @@ interface DrawingState {
   setActiveCustomBrush: (id: string) => void;
   duplicateCustomBrush: (id: string) => string;
   addLayer: () => void;
+  addFrameLayer: () => void;
   removeLayer: (id: string) => void;
   setActiveLayer: (id: string) => void;
   updateLayer: (id: string, updates: Partial<Layer>) => void;
@@ -106,7 +107,7 @@ interface DrawingState {
   initLayers: (width: number, height: number) => void;
 }
 
-function createLayer(name: string, width: number, height: number): Layer {
+function createLayer(name: string, width: number, height: number, isFrameByFrame = false): Layer {
   let canvas: OffscreenCanvas | null = null;
   try {
     canvas = new OffscreenCanvas(width, height);
@@ -121,6 +122,7 @@ function createLayer(name: string, width: number, height: number): Layer {
     opacity: 1,
     blendMode: 'normal',
     canvas,
+    isFrameByFrame,
   };
 }
 
@@ -186,6 +188,15 @@ export const useDrawingStore = create<DrawingState>((set, get) => ({
   addLayer: () =>
     set((s) => {
       const layer = createLayer(`Layer ${s.layers.length + 1}`, s.canvasWidth, s.canvasHeight);
+      return {
+        layers: [...s.layers, layer],
+        activeLayerId: layer.id,
+      };
+    }),
+
+  addFrameLayer: () =>
+    set((s) => {
+      const layer = createLayer(`Frame Layer ${s.layers.length + 1}`, s.canvasWidth, s.canvasHeight, true);
       return {
         layers: [...s.layers, layer],
         activeLayerId: layer.id,

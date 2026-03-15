@@ -11,6 +11,7 @@ import { computeWorldTransforms, hitTestBone, hitTestBoneJoint, hitTestBoneTip, 
 import { solveIK } from '../../engine/bone/IKSolver';
 import { getPoseAtTime, applyPose } from '../../engine/bone/BonePoseManager';
 import { preloadAllTemplates } from '../../engine/brush/ImageStamps';
+import { saveFrame, restoreFrame } from '../../engine/canvas/FrameCanvasManager';
 import type { Point } from '../../types/drawing';
 import type { Bone } from '../../types/bone';
 
@@ -222,6 +223,41 @@ function CanvasViewport() {
 
     animFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animFrameId);
+  }, []);
+
+  // --- Frame-by-frame layer switching ---
+  const prevFrameRef = useRef<number>(-1);
+  useEffect(() => {
+    let frameCheckId = 0;
+    const checkFrame = () => {
+      const { currentTime, animations, activeAnimationId } = useBoneStore.getState();
+      const anim = animations.find((a) => a.id === activeAnimationId);
+      const fps = anim?.fps ?? 24;
+      const frame = Math.round(currentTime * fps);
+
+      if (frame !== prevFrameRef.current) {
+        const { layers } = useDrawingStore.getState();
+        const frameLayers = layers.filter((l) => l.isFrameByFrame && l.canvas);
+
+        if (frameLayers.length > 0) {
+          // Save previous frame's content
+          if (prevFrameRef.current >= 0) {
+            for (const layer of frameLayers) {
+              saveFrame(layer.id, prevFrameRef.current, layer.canvas!);
+            }
+          }
+          // Restore target frame's content
+          for (const layer of frameLayers) {
+            restoreFrame(layer.id, frame, layer.canvas!);
+          }
+          engineRef.current?.invalidate();
+        }
+        prevFrameRef.current = frame;
+      }
+      frameCheckId = requestAnimationFrame(checkFrame);
+    };
+    frameCheckId = requestAnimationFrame(checkFrame);
+    return () => cancelAnimationFrame(frameCheckId);
   }, []);
 
   // --- Space key for pan ---
