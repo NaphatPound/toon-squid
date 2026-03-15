@@ -402,6 +402,28 @@ function CanvasViewport() {
       // Shift = setup mode (move bone without affecting image)
       boneSetupModeRef.current = nativeEvent.shiftKey;
 
+      // In animate mode, sync the store bones to the current pose
+      // before starting a drag so boneOrigRef captures the correct
+      // (pose-applied) values instead of stale rest-pose values.
+      const syncBoneToPose = (boneId: string) => {
+        if (appMode === 'animate' && boneStore.activeAnimationId) {
+          const anim = boneStore.animations.find((a) => a.id === boneStore.activeAnimationId);
+          if (anim && anim.poses.length > 0) {
+            const transforms = getPoseAtTime(anim, boneStore.currentTime);
+            const t = transforms[boneId];
+            if (t) {
+              boneStore.updateBone(boneId, {
+                localRotation: t.rotation,
+                localScaleX: t.scaleX,
+                localScaleY: t.scaleY,
+                localX: t.translateX,
+                localY: t.translateY,
+              });
+            }
+          }
+        }
+      };
+
       // 1. Hit test joint → move
       const jointHit = hitTestBoneJoint(worldBones, docPt.x, docPt.y, hitThreshold);
       if (jointHit) {
@@ -409,6 +431,7 @@ function CanvasViewport() {
         dragBoneIdRef.current = jointHit.id;
         boneStartDocRef.current = { x: docPt.x, y: docPt.y };
         boneStore.selectBone(jointHit.id);
+        syncBoneToPose(jointHit.id);
         const raw = boneStore.getBone(jointHit.id);
         if (raw) boneOrigRef.current = { localX: raw.localX, localY: raw.localY, localRotation: raw.localRotation };
         capture();
@@ -423,6 +446,7 @@ function CanvasViewport() {
         dragBoneIdRef.current = tipHit.id;
         boneStartDocRef.current = { x: docPt.x, y: docPt.y };
         boneStore.selectBone(tipHit.id);
+        syncBoneToPose(tipHit.id);
         const raw = boneStore.getBone(tipHit.id);
         if (raw) boneOrigRef.current = { localX: raw.localX, localY: raw.localY, localRotation: raw.localRotation };
         capture();
@@ -437,6 +461,7 @@ function CanvasViewport() {
         dragBoneIdRef.current = bodyHit.id;
         boneStartDocRef.current = { x: docPt.x, y: docPt.y };
         boneStore.selectBone(bodyHit.id);
+        syncBoneToPose(bodyHit.id);
         const raw = boneStore.getBone(bodyHit.id);
         if (raw) boneOrigRef.current = { localX: raw.localX, localY: raw.localY, localRotation: raw.localRotation };
         capture();
