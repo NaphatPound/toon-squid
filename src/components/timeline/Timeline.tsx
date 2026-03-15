@@ -22,7 +22,9 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     height: HEADER_HEIGHT,
-    borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid' as const,
+    borderBottomColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
     flexShrink: 0,
   },
   trackLabel: {
@@ -52,7 +54,9 @@ const styles = {
     paddingLeft: 'var(--spacing-md, 12px)',
     fontSize: 'var(--font-size-xs, 10px)',
     color: 'var(--text-secondary, #8b949e)',
-    borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid' as const,
+    borderBottomColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap' as const,
@@ -68,7 +72,9 @@ const styles = {
     top: 0,
     zIndex: 2,
     background: 'var(--bg-tertiary, #161b22)',
-    borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid' as const,
+    borderBottomColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
     cursor: 'pointer',
   },
   rulerCanvas: {
@@ -79,7 +85,9 @@ const styles = {
   },
   trackRow: {
     height: TRACK_HEIGHT,
-    borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid' as const,
+    borderBottomColor: 'var(--border-color, rgba(255, 255, 255, 0.08))',
     position: 'relative' as const,
   },
   playhead: {
@@ -235,6 +243,22 @@ export default function Timeline() {
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
+  const handleDuplicateTo = useCallback(
+    (targetFrame: number) => {
+      if (!dupTarget) return;
+      const layer = layers.find((l) => l.id === dupTarget.layerId);
+      if (!layer?.canvas) { setDupTarget(null); return; }
+
+      saveFrame(layer.id, currentFrame, layer.canvas);
+      restoreFrame(dupTarget.layerId, dupTarget.srcFrame, layer.canvas);
+      saveFrame(dupTarget.layerId, targetFrame, layer.canvas);
+      restoreFrame(layer.id, currentFrame, layer.canvas);
+
+      setDupTarget(null);
+    },
+    [dupTarget, layers, currentFrame],
+  );
+
   const handleFrameClick = useCallback(
     (e: React.MouseEvent, layerId: string, frame: number) => {
       if (dupTarget && dupTarget.layerId === layerId) {
@@ -247,18 +271,15 @@ export default function Timeline() {
         const layerSet = new Set(next.get(layerId) ?? []);
 
         if (e.ctrlKey || e.metaKey) {
-          // Toggle single frame
           if (layerSet.has(frame)) layerSet.delete(frame);
           else layerSet.add(frame);
         } else if (e.shiftKey && layerSet.size > 0) {
-          // Range select from last selected to this frame
           const existing = Array.from(layerSet);
           const anchor = existing[existing.length - 1];
           const lo = Math.min(anchor, frame);
           const hi = Math.max(anchor, frame);
           for (let i = lo; i <= hi; i++) layerSet.add(i);
         } else {
-          // Single select (replace)
           next.clear();
           layerSet.clear();
           layerSet.add(frame);
@@ -299,9 +320,7 @@ export default function Timeline() {
       const layer = layers.find((l) => l.id === layerId);
       if (!layer?.canvas) continue;
 
-      // Sort frames ascending
       const sorted = Array.from(frames).sort((a, b) => a - b);
-      // Save current canvas
       saveFrame(layerId, currentFrame, layer.canvas);
 
       for (const srcFrame of sorted) {
@@ -311,7 +330,6 @@ export default function Timeline() {
         saveFrame(layerId, targetFrame, layer.canvas);
       }
 
-      // Restore current frame
       restoreFrame(layerId, currentFrame, layer.canvas);
     }
     setSelectedFrames(new Map());
@@ -323,28 +341,6 @@ export default function Timeline() {
     setDupTarget({ layerId: ctxMenu.layerId, srcFrame: ctxMenu.frame });
     setCtxMenu(null);
   }, [ctxMenu]);
-
-  const handleDuplicateTo = useCallback(
-    (targetFrame: number) => {
-      if (!dupTarget) return;
-      const layer = layers.find((l) => l.id === dupTarget.layerId);
-      if (!layer?.canvas) { setDupTarget(null); return; }
-
-      // Save current frame first
-      saveFrame(layer.id, currentFrame, layer.canvas);
-
-      // Restore source frame to canvas temporarily
-      restoreFrame(dupTarget.layerId, dupTarget.srcFrame, layer.canvas);
-      // Save it as target frame
-      saveFrame(dupTarget.layerId, targetFrame, layer.canvas);
-
-      // Restore the current frame back
-      restoreFrame(layer.id, currentFrame, layer.canvas);
-
-      setDupTarget(null);
-    },
-    [dupTarget, layers, currentFrame],
-  );
 
   const handleDupToNextFrame = useCallback(() => {
     if (!ctxMenu) return;
