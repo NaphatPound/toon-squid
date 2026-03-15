@@ -164,7 +164,7 @@ const customBrushRenderer = new CustomBrushRenderer({
   rotation: 'none', rotationAngle: 0, sizeJitter: 0, opacityJitter: 0,
   hardness: 0.8, roundness: 1, grainOpacity: 0, grainScale: 1,
   taperStart: 0.15, taperEnd: 0.15, pressureSize: true, pressureOpacity: false,
-  dualBrush: false, dualShape: 'circle', dualSizeRatio: 0.5,
+  dualBrush: false, dualShape: 'circle', dualSizeRatio: 0.5, imageStampId: '',
 });
 
 const RENDERERS: Record<BrushType, BrushRenderer> = {
@@ -222,12 +222,25 @@ export class BrushEngine {
   ): void {
     if (points.length === 0) return;
 
-    const stamps = computeDynamicStroke(points, settings);
-    const spaced = spacedStamps(stamps, settings.spacing, settings.size);
+    // For image-template brushes, use high smoothing and fine spacing
+    // so the template follows curves cleanly without jagged edges.
+    let effectiveSettings = settings;
+    if (brushType === 'custom' && customBrushRenderer.isImageBrush()) {
+      effectiveSettings = {
+        ...settings,
+        smoothing: Math.max(settings.smoothing, 0.85),
+        spacing: Math.min(settings.spacing, 0.02),
+        pressureSize: false,
+        pressureOpacity: false,
+      };
+    }
+
+    const stamps = computeDynamicStroke(points, effectiveSettings);
+    const spaced = spacedStamps(stamps, effectiveSettings.spacing, effectiveSettings.size);
     const renderer = RENDERERS[brushType];
 
     ctx.save();
-    renderer.renderStroke(ctx, spaced, settings);
+    renderer.renderStroke(ctx, spaced, effectiveSettings);
     ctx.restore();
   }
 

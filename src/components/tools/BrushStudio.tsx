@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useDrawingStore } from '../../store/drawingStore';
 import type { CustomBrush, StampShape } from '../../types/drawing';
+import { IMAGE_TEMPLATES } from '../../engine/brush/ImageStamps';
 
 const SHAPES: { value: StampShape; label: string }[] = [
   { value: 'circle', label: 'Circle' },
@@ -8,6 +9,7 @@ const SHAPES: { value: StampShape; label: string }[] = [
   { value: 'diamond', label: 'Diamond' },
   { value: 'star', label: 'Star' },
   { value: 'scatter-dots', label: 'Scatter' },
+  { value: 'image', label: 'Image Stamp' },
 ];
 
 const ROTATIONS: { value: string; label: string }[] = [
@@ -209,9 +211,16 @@ export default function BrushStudio() {
             onMouseEnter={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.04))'; }}
             onMouseLeave={(e) => { if (brush.id !== activeCustomBrushId) e.currentTarget.style.background = 'transparent'; }}
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <circle cx="5" cy="5" r="4" fill="currentColor" />
-            </svg>
+            {brush.shape === 'image' ? (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <rect x="1" y="1" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                <path d="M3 7l2-3 2 2 1-1 1 2" stroke="currentColor" strokeWidth="0.8" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <circle cx="5" cy="5" r="4" fill="currentColor" />
+              </svg>
+            )}
             {brush.name}
           </button>
         ))}
@@ -254,8 +263,27 @@ export default function BrushStudio() {
               {SHAPES.map((sh) => <option key={sh.value} value={sh.value}>{sh.label}</option>)}
             </select>
           </div>
-          <SliderRow label="Roundness" value={activeBrush.roundness} min={0.1} max={1} step={0.05} onChange={(v) => update({ roundness: v })} />
-          <SliderRow label="Hardness" value={activeBrush.hardness} min={0} max={1} step={0.05} onChange={(v) => update({ hardness: v })} />
+          {activeBrush.shape === 'image' && (
+            <div style={s.row}>
+              <span style={s.label}>Stamp</span>
+              <select
+                style={s.select}
+                value={activeBrush.imageStampId || ''}
+                onChange={(e) => update({ imageStampId: e.target.value })}
+              >
+                <option value="">None</option>
+                {IMAGE_TEMPLATES.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {activeBrush.shape !== 'image' && (
+            <>
+              <SliderRow label="Roundness" value={activeBrush.roundness} min={0.1} max={1} step={0.05} onChange={(v) => update({ roundness: v })} />
+              <SliderRow label="Hardness" value={activeBrush.hardness} min={0} max={1} step={0.05} onChange={(v) => update({ hardness: v })} />
+            </>
+          )}
 
           {/* Stroke */}
           <div style={s.section}>Stroke</div>

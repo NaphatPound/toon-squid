@@ -8,7 +8,24 @@ const BRUSHES_KEY = 'toon-squid-custom-brushes';
 function loadCustomBrushes(): CustomBrush[] {
   try {
     const stored = localStorage.getItem(BRUSHES_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const brushes: CustomBrush[] = JSON.parse(stored);
+      // Migrate: add imageStampId if missing
+      for (const b of brushes) {
+        if (b.imageStampId === undefined) b.imageStampId = '';
+      }
+      // Remove old/obsolete image brushes from previous iterations
+      const obsoleteIds = new Set(['stamp-leg', 'stamp-arm', 'stamp-head', 'stamp-body', 'tpl-arm', 'tpl-head', 'tpl-body']);
+      const filtered = brushes.filter((b) => !obsoleteIds.has(b.id));
+      // Check if image template brushes exist, if not add defaults
+      const hasImageStamps = filtered.some((b) => b.shape === 'image');
+      if (!hasImageStamps) {
+        const defaults = getDefaultCustomBrushes();
+        const imageStampDefaults = defaults.filter((b) => b.shape === 'image');
+        filtered.push(...imageStampDefaults);
+      }
+      return filtered;
+    }
   } catch { /* ignore */ }
   return getDefaultCustomBrushes();
 }
@@ -41,6 +58,7 @@ function createDefaultBrush(): CustomBrush {
     dualBrush: false,
     dualShape: 'circle',
     dualSizeRatio: 0.5,
+    imageStampId: '',
   };
 }
 
@@ -52,6 +70,8 @@ function getDefaultCustomBrushes(): CustomBrush[] {
     { ...createDefaultBrush(), id: 'spray-paint', name: 'Spray Paint', shape: 'scatter-dots', scatter: 0.8, sizeJitter: 0.6, opacityJitter: 0.5, spacing: 0.05, hardness: 1 },
     { ...createDefaultBrush(), id: 'charcoal', name: 'Charcoal', shape: 'square', rotation: 'random', scatter: 0.15, sizeJitter: 0.2, grainOpacity: 0.7, grainScale: 1.5, hardness: 0.5, spacing: 0.08 },
     { ...createDefaultBrush(), id: 'calligraphy', name: 'Calligraphy', roundness: 0.15, rotationAngle: 45, hardness: 1, spacing: 0.05, taperStart: 0.3, taperEnd: 0.4 },
+    // Image template brushes (progressive drawing along stroke)
+    { ...createDefaultBrush(), id: 'tpl-leg', name: 'Leg', shape: 'image', imageStampId: 'leg', spacing: 0.05, hardness: 1, pressureSize: false, taperStart: 0, taperEnd: 0 },
   ];
 }
 

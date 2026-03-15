@@ -1,7 +1,8 @@
 import type { BrushSettings, CustomBrush, StampShape } from '../../types/drawing';
 import type { StampPoint } from './DynamicStroke';
 import type { BrushRenderer } from './BrushEngine';
-import { clamp } from '../../utils/math';
+import { clamp, distance } from '../../utils/math';
+import { getTemplateImage } from './ImageStamps';
 
 /**
  * Renders a single stamp shape at the given position.
@@ -27,7 +28,6 @@ function drawShape(
   ctx.globalAlpha = alpha;
 
   if (hardness < 1 && shape === 'circle') {
-    // Soft brush with radial gradient
     const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
     grad.addColorStop(0, color);
     grad.addColorStop(clamp(hardness, 0.01, 0.99), color);
@@ -73,7 +73,6 @@ function drawShape(
         break;
       }
       case 'scatter-dots': {
-        // Multiple small dots scattered in the area
         const count = Math.max(3, Math.floor(radius * 1.5));
         for (let i = 0; i < count; i++) {
           const angle = Math.random() * Math.PI * 2;
@@ -85,6 +84,13 @@ function drawShape(
         }
         break;
       }
+      case 'image':
+        // Image template rendering is handled in renderStroke.
+        // Fallback to a small circle for single-point strokes.
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        break;
     }
   }
 
@@ -109,7 +115,6 @@ function applyGrain(
   ctx.globalAlpha = grainOpacity;
 
   const step = Math.max(1, Math.floor(grainScale * 2));
-  const size = radius * 2;
 
   for (let gy = -radius; gy < radius; gy += step) {
     for (let gx = -radius; gx < radius; gx += step) {
@@ -125,7 +130,8 @@ function applyGrain(
 }
 
 /**
- * Custom brush renderer that supports Procreate-like brush properties.
+ * Custom brush renderer that supports Procreate-like brush properties
+ * and image-template brushes.
  */
 export class CustomBrushRenderer implements BrushRenderer {
   private brush: CustomBrush;
@@ -138,22 +144,24 @@ export class CustomBrushRenderer implements BrushRenderer {
     this.brush = brush;
   }
 
+  /** Returns true if the current brush uses an image template. */
+  isImageBrush(): boolean {
+    return this.brush.shape === 'image' && !!this.brush.imageStampId;
+  }
+
   renderStamp(ctx: CanvasRenderingContext2D, stamp: StampPoint, settings: BrushSettings): void {
     const b = this.brush;
     let r = stamp.width / 2;
 
-    // Size jitter
     if (b.sizeJitter > 0) {
       r *= 1 - b.sizeJitter * 0.5 + Math.random() * b.sizeJitter;
     }
 
     let opacity = stamp.opacity;
-    // Opacity jitter
     if (b.opacityJitter > 0) {
       opacity *= 1 - b.opacityJitter + Math.random() * b.opacityJitter;
     }
 
-    // Scatter offset
     let sx = stamp.x;
     let sy = stamp.y;
     if (b.scatter > 0) {
@@ -166,24 +174,20 @@ export class CustomBrushRenderer implements BrushRenderer {
     ctx.save();
     ctx.translate(sx, sy);
 
-    // Rotation
     if (b.rotation === 'random') {
       ctx.rotate(Math.random() * Math.PI * 2);
     } else if (b.rotation === 'none' && b.rotationAngle !== 0) {
       ctx.rotate(b.rotationAngle * Math.PI / 180);
     }
-    // 'follow-stroke' rotation is handled per-stamp in renderStroke
 
     ctx.translate(-sx, -sy);
 
     drawShape(ctx, sx, sy, r, b.shape, b.hardness, b.roundness, settings.color, opacity);
 
-    // Grain
     if (b.grainOpacity > 0) {
       applyGrain(ctx, sx, sy, r, b.grainOpacity * 0.3, b.grainScale);
     }
 
-    // Dual brush
     if (b.dualBrush) {
       const dualR = r * b.dualSizeRatio;
       drawShape(ctx, sx, sy, dualR, b.dualShape, b.hardness, b.roundness, settings.color, opacity * 0.5);
@@ -192,9 +196,121 @@ export class CustomBrushRenderer implements BrushRenderer {
     ctx.restore();
   }
 
-  renderStroke(ctx: CanvasRenderingContext2D, stamps: StampPoint[], settings: BrushSettings): void {
-    if (stamps.length === 0) return;
+  // ──────────────────────────────────────────────────────────
+  //  Image-template rendering
+  //
+  //  The template image is VERTICAL:
+  //    Image Y (top→bottom) = along the body part (hip → foot)
+  //    Image X (left→right) = width / thickness of the body part
+  //
+  //  We slice the image into thin horizontal strips and lay each
+  //  strip along the stroke path, rotated to follow curves.
+  //  Drawing stops once the full image has been revealed.
+  // ──────────────────────────────────────────────────────────
 
+  private renderImageTemplate(
+    ctx: CanvasRenderingContext2D,
+    stamps: StampPoint[],
+    settings: BrushSettings
+  ): void {
+    const b = this.brush;
+    const img = getTemplateImage(b.imageStampId);
+    if (!img || stamps.length < 2) {
+      // Image not loaded yet or single point – fallback
+      this.renderStampsDefault(ctx, stamps, settings);
+      return;
+    }
+
+    const imgW = img.naturalWidth;
+    const imgH = img.naturalHeight;
+
+    // Use a constant brush width (settings.size) so the template
+    // renders with uniform thickness — no pressure / velocity /
+    // taper variation.  This keeps the image smooth and clean.
+    const brushWidth = settings.size;
+
+    // Scale factor: image X (imgW) maps to brushWidth pixels on canvas.
+    // So image Y (imgH) maps to:
+    //   mappedLength = imgH × (brushWidth / imgW)
+    // This is how many canvas-pixels of stroke it takes to reveal
+    // the entire template at the current brush size.
+    const scale = brushWidth / imgW;
+    const mappedLength = imgH * scale;
+
+    // Calculate cumulative distances along the stroke
+    const segLengths: number[] = [0];
+    let totalLength = 0;
+    for (let i = 1; i < stamps.length; i++) {
+      const d = distance(stamps[i - 1].x, stamps[i - 1].y, stamps[i].x, stamps[i].y);
+      segLengths.push(d);
+      totalLength += d;
+    }
+
+    // How much of the stroke to actually draw (stop at mappedLength)
+    const drawLength = Math.min(totalLength, mappedLength);
+    if (drawLength < 1) return;
+
+    ctx.save();
+    ctx.globalAlpha = clamp(settings.opacity, 0, 1);
+
+    let distSoFar = 0;
+
+    for (let i = 1; i < stamps.length; i++) {
+      if (distSoFar >= drawLength) break; // full image revealed, stop
+
+      const ax = stamps[i - 1].x;
+      const ay = stamps[i - 1].y;
+      const bx = stamps[i].x;
+      const by = stamps[i].y;
+      const segLen = segLengths[i];
+
+      if (segLen < 0.5) { distSoFar += segLen; continue; }
+
+      // Clamp segment if it would overshoot the template
+      const remaining = drawLength - distSoFar;
+      const usedLen = Math.min(segLen, remaining);
+
+      const angle = Math.atan2(by - ay, bx - ax);
+
+      // Source rect in the VERTICAL template image:
+      //   srcY = how far along the image we've progressed
+      //   srcH = how much of the image this segment covers
+      const srcY = (distSoFar / mappedLength) * imgH;
+      const srcH = (usedLen / mappedLength) * imgH;
+
+      // Transform so that:
+      //   canvas-Y axis → stroke direction
+      //   canvas-X axis → perpendicular to stroke
+      // rotate(angle - PI/2) achieves this because:
+      //   after rotate(θ), canvas-X points in direction θ
+      //   angle - PI/2 makes canvas-X point perpendicular to stroke
+      //   and canvas-Y points in direction (angle - PI/2 + PI/2) = angle = stroke dir
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(angle - Math.PI / 2);
+
+      // drawImage maps:
+      //   source X (image width) → dest X (perpendicular to stroke)
+      //   source Y (image height) → dest Y (along stroke)
+      ctx.drawImage(
+        img,
+        0, srcY, imgW, Math.max(1, srcH),                    // source strip
+        -brushWidth / 2, 0, brushWidth, usedLen + 0.5        // dest – uniform width
+      );
+      ctx.restore();
+
+      distSoFar += segLen;
+    }
+
+    ctx.restore();
+  }
+
+  /** Default stamp-by-stamp rendering (non-image brushes). */
+  private renderStampsDefault(
+    ctx: CanvasRenderingContext2D,
+    stamps: StampPoint[],
+    settings: BrushSettings
+  ): void {
     const b = this.brush;
     const totalStamps = stamps.length;
     const taperStartCount = Math.floor(totalStamps * b.taperStart);
@@ -203,7 +319,6 @@ export class CustomBrushRenderer implements BrushRenderer {
     for (let i = 0; i < stamps.length; i++) {
       const stamp = { ...stamps[i] };
 
-      // Taper
       if (i < taperStartCount && taperStartCount > 0) {
         stamp.width *= (i + 1) / (taperStartCount + 1);
       }
@@ -211,7 +326,6 @@ export class CustomBrushRenderer implements BrushRenderer {
         stamp.width *= (totalStamps - i) / (taperEndCount + 1);
       }
 
-      // Follow-stroke rotation
       if (b.rotation === 'follow-stroke' && i < stamps.length - 1) {
         const next = stamps[Math.min(i + 1, stamps.length - 1)];
         const prev = stamps[Math.max(i - 1, 0)];
@@ -226,5 +340,17 @@ export class CustomBrushRenderer implements BrushRenderer {
         this.renderStamp(ctx, stamp, settings);
       }
     }
+  }
+
+  renderStroke(ctx: CanvasRenderingContext2D, stamps: StampPoint[], settings: BrushSettings): void {
+    if (stamps.length === 0) return;
+
+    // Image template brushes use a completely different rendering path
+    if (this.brush.shape === 'image' && this.brush.imageStampId) {
+      this.renderImageTemplate(ctx, stamps, settings);
+      return;
+    }
+
+    this.renderStampsDefault(ctx, stamps, settings);
   }
 }

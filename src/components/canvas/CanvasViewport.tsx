@@ -9,6 +9,7 @@ import { generateId, Matrix2D, Vec2 } from '../../utils/math';
 import { renderCursorOverlay } from './CanvasOverlay';
 import { computeWorldTransforms, hitTestBone, hitTestBoneJoint, hitTestBoneTip, getBoneTip } from '../../engine/bone/BoneSystem';
 import { getPoseAtTime, applyPose } from '../../engine/bone/BonePoseManager';
+import { preloadAllTemplates } from '../../engine/brush/ImageStamps';
 import type { Point } from '../../types/drawing';
 import type { Bone } from '../../types/bone';
 
@@ -79,6 +80,8 @@ function CanvasViewport() {
     engine.init(layerCanvas, overlayCanvas);
     engine.resize(w, h);
     brushEngine.setPreviewContext(engine.overlay!);
+
+    preloadAllTemplates();
 
     const { canvasWidth, canvasHeight, initLayers, layers } = useDrawingStore.getState();
     if (layers.length === 0) {

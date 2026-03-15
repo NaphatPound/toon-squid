@@ -28,7 +28,7 @@ export interface Stroke {
 export type BrushType = 'pen' | 'ink' | 'pencil' | 'marker' | 'eraser' | 'custom';
 
 /** Shape source for custom brush stamps */
-export type StampShape = 'circle' | 'square' | 'diamond' | 'star' | 'scatter-dots';
+export type StampShape = 'circle' | 'square' | 'diamond' | 'star' | 'scatter-dots' | 'image';
 
 /** Custom brush definition (Procreate-like) */
 export interface CustomBrush {
@@ -70,6 +70,8 @@ export interface CustomBrush {
   dualShape: StampShape;
   /** Dual brush size ratio */
   dualSizeRatio: number;
+  /** Image stamp id (for shape === 'image') */
+  imageStampId: string;
 }
 
 export interface Layer {
