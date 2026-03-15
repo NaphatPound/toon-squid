@@ -14,7 +14,20 @@ function key(layerId: string, frame: number): string {
 }
 
 /**
+ * Check if a canvas has any non-transparent pixels.
+ */
+function canvasHasContent(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number): boolean {
+  const data = ctx.getImageData(0, 0, w, h).data;
+  // Check alpha channel every 64 pixels for speed
+  for (let i = 3; i < data.length; i += 256) {
+    if (data[i] > 0) return true;
+  }
+  return false;
+}
+
+/**
  * Save the current canvas content for a specific frame.
+ * Only saves if the canvas has visible content (non-empty).
  */
 export function saveFrame(
   layerId: string,
@@ -23,7 +36,17 @@ export function saveFrame(
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  if (!canvasHasContent(ctx, w, h)) {
+    // Canvas is empty — remove any stored data for this frame
+    frameStore.delete(key(layerId, frame));
+    return;
+  }
+
+  const data = ctx.getImageData(0, 0, w, h);
   frameStore.set(key(layerId, frame), data);
 }
 
